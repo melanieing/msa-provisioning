@@ -1,0 +1,41 @@
+- name: Kubernetesクラスタのマスターノードの初期化
+  hosts: main-master
+  become: true
+  tasks:
+    - name: containerdサービスの開始と有効化
+      ansible.builtin.systemd:
+        name: containerd
+        state: started
+        enabled: true
+
+    - name: kubeadm init成功チェック経路変更
+      lineinfile:
+        path: /etc/hosts
+        line: "127.0.0.1 {{ nlb_dns_name }}"
+
+    - name: kubeadm initコマンドの実行
+      ansible.builtin.shell: |
+        kubeadm init \
+          --control-plane-endpoint "{{ control_plane_endpoint }}" \
+          --upload-certs \
+          --cri-socket unix:///var/run/containerd/containerd.sock \
+          --pod-network-cidr=192.168.0.0/16
+      register: init_output
+      args:
+        creates: /etc/kubernetes/admin.conf
+      ignore_errors: true
+
+    - name: kubectlのためのkubeconfig設定
+      ansible.builtin.file:
+        path: /home/ec2-user/.kube
+        state: directory
+        mode: "0755"
+        owner: ec2-user
+
+    - name: configファイルのコピー
+      ansible.builtin.copy:
+        src: /etc/kubernetes/admin.conf
+        dest: /home/ec2-user/.kube/config
+        remote_src: true
+        owner: ec2-user
+        mode: "0600"

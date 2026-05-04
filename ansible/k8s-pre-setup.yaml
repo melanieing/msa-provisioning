@@ -1,0 +1,21 @@
+- name: Kubernetesクラスタの前提条件の設定
+  hosts: all
+  become: true
+  tasks:
+    - name: スワップの無効化
+      ansible.builtin.command: swapoff -a
+      when: ansible_swaptotal_mb > 0
+
+    - name: カーネルモジュールのロード
+      modprobe:
+        name: "{{ item }}"
+        state: present
+      loop:
+        - overlay
+        - br_netfilter
+
+    - name: ブリッジネットワーク設定の適用
+      ansible.builtin.sysctl:
+        name: net.bridge.bridge-nf-call-iptables
+        value: "1"
+        state: present
