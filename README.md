@@ -1,8 +1,8 @@
 ### AWS Architecture
 ![AWS デプロイアーキテクチャ](images/AWS-arch.png)
 
-### IAM Policy
-- terraformを実行するには下記のようなIAMポリシーが必要だ
+### IAM 정책
+- terraform을 실행하려면 이하와 같은 IAM 정책이 필요하다
 ```json
 {
     "Version": "2012-10-17",
@@ -52,7 +52,7 @@
     ]
 }
 ```
-- IAM Role関連の権限ポリシー
+- IAM Role관련 권한 정책
 ```json
 {
 	"Version": "2012-10-17",
@@ -84,22 +84,22 @@
 ```
 
 ### aws cli
-- terraformではaws-cli aws confitureを通じて認証情報を読み込み
+- terraform에서는 aws-cli aws confiture을 통해서 확인정보를 읽어들임
 ```terminal
 ➜  ktcloud-sptingboot-msa-market-service git:(master) brew install aws-cli
 ```
-- CLI専用のIAM Secret Keyとap-northeast-2リージョンを入力する
+- CLI전용의IAM Secret Key와ap-northeast-2리젼을 입력한다
 ```terminal
 ➜  ktcloud-sptingboot-msa-market-service git:(master) aws configure
 ```
 
-### キーペア
-- キーペアのためにシェルを稼働する
+### 키페어
+- 키페어를 위한 쉘을 가동한다
 ```terminal
 ➜  provisioning git:(master) bash ssh-key-gen.bash
 ```
 
-### NLBをクラスタに登録ためのIAMロール
+### NLB을 클러스터에 등록하기 위한 IAM 롤
 - EKSではなく、EC2で構築したクラスタはNLBを登録するためにノードに以下のIAM政策が必要になる
 https://raw.githubusercontent.com/kubernetes-sigs/aws-load-balancer-controller/v2.7.2/docs/install/iam_policy.json
 - 「ktcloud-cluster-node-role」のIAM Roleに先のIAM政策をアタッチして準備しよう
@@ -111,7 +111,7 @@ https://raw.githubusercontent.com/kubernetes-sigs/aws-load-balancer-controller/v
 ```terminal
 ➜  terraform git:(master) terraform apply
 ```
-- AnsibleのPlaybookを起動するためにリモートホストのFingerprintをローカルマシンに登録する必要がある両方のbastionにssh接続して「yes」を入力しよう
+- Ansible의Playbook을 기동하기위한 리모트 호스트의 Fingerprint를 로컬 머신에 등록할 필요가 있다. 양쪽의 bastion에 ssh접속해서「yes」를 입력하자
 ```terraform
 output "ap-northeast-2a-bastion-node-connect-command" {
   value = "ssh ec2-user@${aws_instance.ap-northeast-2a-bastion-node.public_ip} -i ~/.ssh/ktcloud-bastion-node-key"
@@ -123,29 +123,29 @@ output "ap-northeast-2b-bastion-node-connect-command" {
 ```
 
 ### Ansible
-- inventory.iniがterraformの.tftplから作成され
-- pingが届くことを確認する
+- inventory.iniがterraform의.tftpl에서 작성되어
+- ping이 도달하는지 확인하다.
 ```terminal
 ➜  ansible git:(master) ansible all -m ping -i inventory.ini
 ```
-- K8SのクラスタセットアップPlaybookを起動する
+- K8S의 클러스터 셋업하는 Playbook을 기동한다.
 ```terminal
 ➜  ansible git:(master) ansible-playbook -i inventory.ini main.yaml
 ```
 
 ### K8S Cluster
-- キーペアは同じなので、sshエージェントを登録する
+- 키페어는 같기 때문에 ssh에이전트를 등록한다
 ```terminal
 ➜  ktcloud-sptingboot-msa-market-service git:(master) ✗ ssh-add ~/.ssh/ktcloud-bastion-node-key
 Identity added: /Users/kanei/.ssh/ktcloud-bastion-node-key (kanei@gim-yeonghoui-MacBookPro.local)
 ```
-- 下記のoutputの結果で一気に接続できる
+- 이하의output의 결과를 한번에 확인가능하다
 ```terraform
 output "main-master-node-connect-command" {
   value = "ssh -A -J ec2-user@${aws_instance.ap-northeast-2b-bastion-node.public_ip} ec2-user@${aws_instance.ap-northeast-2b-master-node-01.private_ip}"
 }
 ```
-- 実際に接続して確認してみると
+- 실제로 접속해서 확인하면
 ```terminal
 [ec2-user@ip-10-0-4-212 ~]$ kubectl get nodes
 NAME                                            STATUS   ROLES           AGE   VERSION
@@ -156,7 +156,7 @@ ip-10-0-4-196.ap-northeast-2.compute.internal   Ready    <none>          39m   v
 ip-10-0-4-212.ap-northeast-2.compute.internal   Ready    control-plane   40m   v1.30.14
 ip-10-0-4-6.ap-northeast-2.compute.internal     Ready    <none>          39m   v1.30.14
 ```
-- albを使うためのロードバランサーコントローラーも起動中であることを確認できる
+- alb을 사용하기위한 로드밸런서도 기동중인 것을 확인할 수 있다.
 ```terminal
 [ec2-user@ip-10-0-4-126 ~]$ kubectl get pods -n kube-system -l app.kubernetes.io/name=aws-load-balancer-controller
 NAME                                            READY   STATUS    RESTARTS   AGE
