@@ -163,3 +163,25 @@ NAME                                            READY   STATUS    RESTARTS   AGE
 aws-load-balancer-controller-5cdc56445f-9xn6t   1/1     Running   0          2m15s
 aws-load-balancer-controller-5cdc56445f-gmrcr   1/1     Running   0          2m15s
 ```
+- argocd cli를 설치
+```terminal
+sudo curl -sSL -o /usr/local/bin/argocd https://github.com/argoproj/argo-cd/releases/latest/download/argocd-linux-amd64
+
+sudo chmod +x /usr/local/bin/argocd
+
+argocd version --client
+```
+- argocd login
+```terminal
+kubectl -n argocd get secret argocd-initial-admin-secret -o jsonpath="{.data.password}" | base64 -d; echo
+
+argocd login <b-master-01-ip>:30080 --username admin --insecure
+```
+- argocd command, Traefik은 Degraded에서 Healthy 까지 5분 이상 걸린다
+```terminal
+argocd app list
+
+argocd app get argocd/root-app
+
+argocd app sync root-app --prune
+```
