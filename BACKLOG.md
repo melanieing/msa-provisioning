@@ -11,17 +11,16 @@
 |---|---|
 | **마감일** | 2026-05-20 |
 | **남은 일수** | 12일 |
-| **현재 위치** | A9 Spring Boot 3.5.14 업그레이드 완료. 다음: B-2b Dockerfile |
-| **진행률** | Phase A 80%, Phase B 50%, Phase C 0%, Phase D 0% |
+| **현재 위치** | B-2b Dockerfile 완료. 다음: D-1 GitHub Actions CI |
+| **진행률** | Phase A 80%, Phase B 60%, Phase C 0%, Phase D 0% |
 | **AWS 비용 사용량** | 0 / 66,000 KRW (아직 부트스트랩 X) |
 
 ### 다음 우선순위 (순서대로)
 
-1. **🎯 [B-2b] 5개 서비스 Dockerfile + 멀티스테이지 빌드** — 이미지 없으면 차트가 의미 없음
+1. **🎯 [D-1] GitHub Actions CI** (Dockerfile 검증 + 이미지 빌드 + push + 매니페스트 image tag bump)
 2. **🎯 [B-2c] 5개 서비스 Helm 차트** (`msa-spring-boot/charts/services/*`) — ApplicationSet 자동 등록
-3. **[D-1] GitHub Actions CI** (빌드 + 이미지 push + 매니페스트 image tag bump)
-4. **[클러스터 첫 부트스트랩]** 실제 실행 + 검증
-5. **[Phase C]** 백엔드 보강 (JWT, Rate Limit, Resilience4j, Outbox Poller)
+3. **[클러스터 첫 부트스트랩]** 실제 실행 + 검증
+4. **[Phase C]** 백엔드 보강 (JWT, Rate Limit, Resilience4j, Outbox Poller)
 
 ### 🚨 위험 / 차단 요소
 
@@ -34,6 +33,7 @@
 ## ✅ 완료 (역순, 최근 → 옛날)
 
 ### 2026-05-08
+- ✅ **B-2b 4개 서비스 Dockerfile + .dockerignore** — 멀티스테이지 (jdk build → layered extract → jre runtime), Spring Boot layered jar 활용 (캐싱 효율), non-root user (보안), HEALTHCHECK (actuator). 4개 service 모듈에 `bootJar` 활성 + root 의 라이브러리 default 비활성을 화이트리스트 기반으로 정리. 실 `docker build` 검증은 사용자 로컬 Docker 미설치라 D-1 CI 에서.
 - ✅ **A9 Spring Boot 3.3.0 → 3.5.14 업그레이드** — `./gradlew assemble` 14개 모듈 모두 통과. 부가 변경:
   - Spring Cloud Gateway 4.1.9 → 4.3.0 (Spring Boot 3.5 짝)
   - user-api-gateway 의 webflux 하드코딩 버전 제거 (Boot plugin 자동 매니지)
@@ -71,7 +71,7 @@
 | A7 | EC2 stop/start/bootstrap/teardown 스크립트 | ✅ 완료 | 5종 PowerShell 스크립트 |
 | A8 | Ansible argocd_namespace 변수 + URL fix | ✅ 완료 | 외부 레포 수정으로 사용자가 진행 |
 | A9 | **Spring Boot 3.3.0 → 3.5.14 업그레이드** | ✅ **완료** (2026-05-08) | + Cloud Gateway 4.1.9→4.3.0, multi-module bootJar 설정 정리, gradle wrapper 누락 fix |
-| A10 | **5개 서비스 Dockerfile** + 멀티스테이지 빌드 | 🎯 **다음** | 이미지 없으면 Helm 차트 의미 없음 |
+| A10 | **4개 서비스 Dockerfile** + 멀티스테이지 빌드 | ✅ 완료 (2026-05-08) | layered jar + non-root + healthcheck. notification-service 는 모듈 자체 미존재라 제외. |
 | A+ | NAT Gateway 1개로 줄이기 (선택) | ⏳ 검토 | 시간당 60원 절감. HA 손해. 4h/일 운영 시 사실상 불필요 |
 
 ---
@@ -94,7 +94,7 @@
 
 | ID | 항목 | 상태 | 위치 | 우선순위 |
 |---|---|---|---|---|
-| B-2b | **4개 서비스 Dockerfile + .dockerignore** | 🟡 **진행 중** (2026-05-08) | 멀티스테이지 + Spring Boot layered jar |
+| B-2b | **4개 서비스 Dockerfile + .dockerignore** | ✅ 완료 (2026-05-08) | 멀티스테이지 + layered jar + non-root + healthcheck |
 | B6a | user-api-gateway Helm 차트 | ⏳ | `msa-spring-boot/charts/services/user-api-gateway/` | 후속 |
 | B6b | product-service Helm 차트 | ⏳ | `charts/services/product-service/` | 후속 |
 | B6c | order-service Helm 차트 | ⏳ | `charts/services/order-service/` | 후속 |
@@ -183,5 +183,6 @@ Day 13  (5/20)     : 발표
 
 | 일자 | 변경 |
 |---|---|
+| 2026-05-08 | B-2b 4개 서비스 Dockerfile + .dockerignore. 멀티스테이지 + Spring Boot layered jar + non-root + healthcheck 패턴. |
 | 2026-05-08 | A9 Spring Boot 3.3.0 → 3.5.14 업그레이드 완료. Gradle wrapper 누락 fix 포함. |
 | 2026-05-08 | 백로그 파일 신규 작성 (BACKLOG.md) |
