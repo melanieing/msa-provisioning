@@ -146,9 +146,11 @@
 |---|---|---|
 | **Dockerfile** (4개 서비스) | 멀티스테이지 + layered jar + non-root | ✅ 적용 (2026-05-08) |
 | **Base image** | `eclipse-temurin:21-jdk` (build) + `21-jre` (runtime) | ✅ 적용 |
-| **GitHub Actions** | (예정 워크플로) | ⏳ 미구현 |
-| **Container Registry** | ECR 또는 GHCR | ⏳ 미결정 |
-| **Trivy 보안 스캔** | latest action | ⏳ 미구현 |
+| **Container Registry** | **AWS ECR** (Private + KMS 암호화 + lifecycle) | ✅ Terraform 코드 (2026-05-08) — apply 필요 |
+| **GitHub Actions ↔ AWS** | **OIDC 페더레이션** (장기 access key 미사용) | ✅ Terraform 코드 (2026-05-08) — apply 필요 |
+| **GitHub Actions** workflow | 서비스별 빌드 + ECR push + 매니페스트 tag bump | ⏳ 다음 |
+| **ECR scan on push** | AWS 기본 취약점 스캔 | ✅ 적용 (scan_on_push=true) |
+| **Trivy 보안 스캔** | latest action | ⏳ 미구현 (ECR scan 으로 대체 가능) |
 
 ---
 
@@ -188,10 +190,11 @@
 
 ## 미적용 / 예정 작업 (큰 항목)
 
-- [ ] Spring Boot 3.3.0 → **3.5.14 업그레이드**
+- [x] ~~Spring Boot 3.3.0 → 3.5.14 업그레이드~~ (2026-05-08 완료)
+- [x] ~~4개 서비스 Dockerfile~~ (2026-05-08 완료)
+- [x] ~~ECR + KMS + GitHub OIDC Terraform 코드~~ (2026-05-08 완료, apply 필요)
 - [ ] **5개 마이크로서비스 Helm 차트** 작성 (`charts/services/*`)
-- [ ] **5개 서비스 Dockerfile** + 멀티스테이지 빌드
-- [ ] **GitHub Actions CI** (빌드 + 테스트 + 이미지 push + 매니페스트 tag bump)
+- [ ] **GitHub Actions workflow** (서비스별 빌드 + ECR push + 매니페스트 tag bump)
 - [ ] **JWT 인증 필터** + **Rate Limit** (user-api-gateway)
 - [ ] **Resilience4j Circuit Breaker** 통합
 - [ ] **Outbox Poller** (`@Scheduled`)

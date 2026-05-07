@@ -30,6 +30,16 @@ resource "aws_iam_instance_profile" "node" {
 }
 
 
+# ─── ECR Pull 권한을 노드 Role 에 부착 ────────────────────────────
+# K8s 가 ECR private repo 에서 이미지를 pull 하려면 노드에 권한 필요.
+# AWS 관리형 정책 'AmazonEC2ContainerRegistryReadOnly' 사용 — pull only, push X.
+# (이 권한이 있으면 K8s manifest 에 imagePullSecret 안 만들어도 됨)
+resource "aws_iam_role_policy_attachment" "node_ecr_readonly" {
+  role       = data.aws_iam_role.node.name
+  policy_arn = "arn:aws:iam::aws:policy/AmazonEC2ContainerRegistryReadOnly"
+}
+
+
 # ═════════════════════════════════════════════════════════════════
 # AZ A — master ×2 + worker ×1 + bastion ×1
 # ═════════════════════════════════════════════════════════════════

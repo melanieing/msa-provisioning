@@ -11,9 +11,9 @@
 |---|---|
 | **마감일** | 2026-05-20 |
 | **남은 일수** | 12일 |
-| **현재 위치** | B-2b Dockerfile 완료. 다음: D-1 GitHub Actions CI |
-| **진행률** | Phase A 80%, Phase B 60%, Phase C 0%, Phase D 0% |
-| **AWS 비용 사용량** | 0 / 66,000 KRW (아직 부트스트랩 X) |
+| **현재 위치** | 🎉 **첫 terraform apply 성공** (2026-05-08). D-1 진행 중 (GitHub Actions workflow 다음) |
+| **진행률** | Phase A 90%, Phase B 60%, Phase C 0%, Phase D 30% |
+| **AWS 비용 사용량** | 부트스트랩 시작 (시간당 ~553 KRW. EC2 stop 시 ~180 KRW) |
 
 ### 다음 우선순위 (순서대로)
 
@@ -25,7 +25,7 @@
 ### 🚨 위험 / 차단 요소
 
 - 아직 한 번도 클러스터를 띄워본 적 없음 → **첫 부트스트랩 시 발견될 이슈** 시간 잡아먹을 가능성
-- IAM Role `ktcloud-cluster-node-role` 이 콘솔에서 사전 생성됐는지 미확인
+- ✅ **2026-05-08 발견**: 사용자 첫 `terraform plan` 시 사전 준비 누락 발견 → SSH 키 + IAM Role 수동 생성 가이드 안내. 후속: IAM Role 도 Terraform 자동화 (아래 추가)
 - Helm 차트 버전들이 cutoff 이후이긴 하나 실제 클러스터에서 깨질 가능성
 
 ---
@@ -33,6 +33,9 @@
 ## ✅ 완료 (역순, 최근 → 옛날)
 
 ### 2026-05-08
+- ✅ **🚀 첫 terraform apply 성공** — 63개 AWS 리소스 생성 완료. VPC + EC2 ×8 + NLB + EFS + EBS + ECR ×4 + KMS + GitHub OIDC + IAM Role. Outputs 정상 출력 (bastion IP, master IP 등). AWS 청구 시작.
+- ✅ **사용자 환경 사전 준비 완료** — SSH 키 (Git Bash/WSL→Windows 복사) + IAM Role (`ktcloud-cluster-node-role` AWS CLI 로 생성 + LBC 정책 attach).
+- ✅ **D1-a/b/c Terraform 인프라 추가 (ECR + OIDC + IAM)** — `modules/registry` (ECR ×4 + KMS 키 + lifecycle policy) + `modules/github-oidc` (OIDC provider + GitHub Actions assume role + ECR push policy with sub condition). compute 모듈의 노드 Role 에 `AmazonEC2ContainerRegistryReadOnly` attach. terraform validate 통과.
 - ✅ **B-2b 4개 서비스 Dockerfile + .dockerignore** — 멀티스테이지 (jdk build → layered extract → jre runtime), Spring Boot layered jar 활용 (캐싱 효율), non-root user (보안), HEALTHCHECK (actuator). 4개 service 모듈에 `bootJar` 활성 + root 의 라이브러리 default 비활성을 화이트리스트 기반으로 정리. 실 `docker build` 검증은 사용자 로컬 Docker 미설치라 D-1 CI 에서.
 - ✅ **A9 Spring Boot 3.3.0 → 3.5.14 업그레이드** — `./gradlew assemble` 14개 모듈 모두 통과. 부가 변경:
   - Spring Cloud Gateway 4.1.9 → 4.3.0 (Spring Boot 3.5 짝)
@@ -73,6 +76,7 @@
 | A9 | **Spring Boot 3.3.0 → 3.5.14 업그레이드** | ✅ **완료** (2026-05-08) | + Cloud Gateway 4.1.9→4.3.0, multi-module bootJar 설정 정리, gradle wrapper 누락 fix |
 | A10 | **4개 서비스 Dockerfile** + 멀티스테이지 빌드 | ✅ 완료 (2026-05-08) | layered jar + non-root + healthcheck. notification-service 는 모듈 자체 미존재라 제외. |
 | A+ | NAT Gateway 1개로 줄이기 (선택) | ⏳ 검토 | 시간당 60원 절감. HA 손해. 4h/일 운영 시 사실상 불필요 |
+| A++ | `ktcloud-cluster-node-role` IAM Role 도 Terraform 자동화 | ⏳ 검토 (낮은 우선순위) | 현재는 사용자가 콘솔/CLI 로 수동 생성. 자동화하면 destroy/bootstrap 더 깨끗. LBC IAM 정책 JSON 인라인 또는 data 로 fetch. |
 
 ---
 
@@ -124,7 +128,11 @@
 
 | ID | 항목 | 상태 | 우선순위 |
 |---|---|---|---|
-| D1 | GitHub Actions CI (빌드 + 테스트 + 이미지 push + tag bump) | ⏳ | Must |
+| D1 | GitHub Actions CI (빌드 + 테스트 + 이미지 push + tag bump) | 🟡 **진행 중** (2026-05-08) | ECR + OIDC 채택 |
+| D1-a | Terraform: modules/registry (ECR ×4 + KMS + lifecycle) | ✅ 완료 (2026-05-08) | KMS 키 + scan_on_push + lifecycle (untagged 30, tagged 50) |
+| D1-b | Terraform: modules/github-oidc (OIDC provider + IAM Role) | ✅ 완료 (2026-05-08) | sub condition 으로 melanieing/msa-spring-boot 의 main + claude/* 만 허용 |
+| D1-c | EC2 노드 Role 에 ECR Pull 권한 attach | ✅ 완료 (2026-05-08) | AmazonEC2ContainerRegistryReadOnly 정책 attach |
+| D1-d | GitHub Actions workflow 4개 (서비스마다) | 🟡 진행 중 | 다음 작업 |
 | D2 | OpenTelemetry SDK 5개 서비스 통합 | ⏳ | Must |
 | D3 | Prometheus + Loki + Grafana values 채움 | ⏳ | Must |
 | D4 | Grafana 대시보드 1~2개 (latency, Kafka lag) | ⏳ | Must |
@@ -173,7 +181,8 @@ Day 13  (5/20)     : 발표
 | 일자 | 누적 사용 (KRW) | 비고 |
 |---|---|---|
 | 2026-05-07 | 0 | 인프라 미부트스트랩 |
-| 2026-05-08 | 0 | 동일 |
+| 2026-05-08 (오전) | 0 | 동일 |
+| 2026-05-08 (오후) | **시작** | terraform apply 완료. 시간당 ~553 KRW. EC2 stop 직후 시간당 ~180 KRW |
 
 ⚠️ 첫 부트스트랩 시점부터 시간당 ~553원 청구. **destroy/bootstrap 운영 정책** (CLAUDE.md §5) 준수 필수.
 
@@ -183,6 +192,7 @@ Day 13  (5/20)     : 발표
 
 | 일자 | 변경 |
 |---|---|
+| 2026-05-08 | D1-a/b/c Terraform: ECR ×4 + KMS + lifecycle + GitHub OIDC provider + assume role + 노드 ECR Pull 권한. |
 | 2026-05-08 | B-2b 4개 서비스 Dockerfile + .dockerignore. 멀티스테이지 + Spring Boot layered jar + non-root + healthcheck 패턴. |
 | 2026-05-08 | A9 Spring Boot 3.3.0 → 3.5.14 업그레이드 완료. Gradle wrapper 누락 fix 포함. |
 | 2026-05-08 | 백로그 파일 신규 작성 (BACKLOG.md) |

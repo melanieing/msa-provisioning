@@ -92,3 +92,29 @@ module "storage" {
   private_subnet_a_id = module.network.private_subnet_a_id
   private_subnet_b_id = module.network.private_subnet_b_id
 }
+
+
+# ─── 6. 컨테이너 이미지 레지스트리 (ECR ×4 + KMS + lifecycle) ─────
+module "registry" {
+  source = "./modules/registry"
+
+  name_prefix = var.name_prefix
+  repository_names = [
+    "user-api-gateway",
+    "product-service",
+    "order-service",
+    "inventory-service",
+  ]
+}
+
+
+# ─── 7. GitHub Actions ↔ AWS OIDC 페더레이션 ──────────────────────
+# GitHub Actions 가 ECR 에 push 할 때 임시 자격증명을 받을 수 있도록 함.
+module "github_oidc" {
+  source = "./modules/github-oidc"
+
+  name_prefix         = var.name_prefix
+  github_owner        = "melanieing"
+  github_repo         = "msa-spring-boot"
+  ecr_repository_arns = values(module.registry.repository_arns)
+}
