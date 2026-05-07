@@ -1,0 +1,60 @@
+# ─────────────────────────────────────────────────────────────────────────
+# 이 파일은 뭐 하는 파일이야?
+# ─────────────────────────────────────────────────────────────────────────
+# 변수 값을 바꾸고 싶을 때 쓸 수 있는 "예시 파일" 이야.
+#
+# 사용 방법:
+#   1) 이 파일을 'terraform.tfvars' 라는 이름으로 복사
+#        cp terraform.tfvars.example terraform.tfvars
+#   2) 바꾸고 싶은 줄의 # 만 떼고 값 수정
+#   3) 그냥 'terraform apply' 하면 됨 (.tfvars 는 자동 로드)
+#
+# 안전 장치:
+#   - terraform.tfvars 는 .gitignore 에 등록되어 있어서 git에 안 올라감.
+#   - 실수로 sensitive 값 (예: 인증정보) 적어도 push 안 됨.
+#
+# 모든 줄을 주석 그대로 두면 → 기본값 사용 → 기존 인프라와 동일하게 동작.
+# ─────────────────────────────────────────────────────────────────────────
+
+
+# ─── Region / 이름 ──────────────────────────────────────────────────
+# region      = "ap-northeast-2"       # 서울. 다른 region 쓰려면 AMI 도 같이 바꿔야 함!
+# name_prefix = "kt-cloud"             # NLB/EFS 같은 공유 리소스 앞에 붙음
+
+# ─── 네트워크 ───────────────────────────────────────────────────────
+# vpc_cidr              = "10.0.0.0/16"
+# az_a                  = "ap-northeast-2a"
+# az_b                  = "ap-northeast-2b"
+# public_subnet_a_cidr  = "10.0.1.0/24"
+# private_subnet_a_cidr = "10.0.2.0/24"
+# public_subnet_b_cidr  = "10.0.3.0/24"
+# private_subnet_b_cidr = "10.0.4.0/24"
+
+# ─── EC2 ────────────────────────────────────────────────────────────
+# node_ami_id           = "ami-087e08db3e40f7429"   # AL2 in 서울 region
+# master_instance_type  = "t3.medium"
+# worker_instance_type  = "t3.medium"
+# bastion_instance_type = "t3.nano"
+# worker_ebs_size_gb    = 20
+
+# ─── 💸 비용 절감용 예시 (주석 떼면 적용됨) ─────────────────────────
+# 짧은 데모용 클러스터라면 t3.small 도 가능 (HA 동작은 함, 무거운 워크로드만 못 돌림)
+# 절약 효과: t3.medium 6대 → t3.small 6대 = 시간당 ~165원 → ~85원 (약 50% ↓)
+#
+# master_instance_type = "t3.small"
+# worker_instance_type = "t3.small"
+
+# ─── SSH / IAM ──────────────────────────────────────────────────────
+# ssh_key_name                   = "ktcloud-bastion-node-key"
+# ssh_public_key_path            = "~/.ssh/ktcloud-bastion-node-key.pub"
+# ssh_private_key_path           = "~/.ssh/ktcloud-bastion-node-key"
+# node_iam_role_name             = "ktcloud-cluster-node-role"
+# node_iam_instance_profile_name = "ktcloud-node-profile"
+
+# ─── 모든 리소스에 자동으로 붙을 태그 ───────────────────────────────
+# 비용 분류 / 소유자 명시 용도. 활성화하면 기존 리소스에도 태그가 추가됨 (drift 발생).
+# default_tags = {
+#   Project   = "market-service-msa"
+#   ManagedBy = "terraform"
+#   Owner     = "melanie"
+# }

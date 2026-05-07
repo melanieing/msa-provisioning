@@ -1,4 +1,12 @@
+# ─────────────────────────────────────────────────────────────────────────
+# 이 파일은 뭐 하는 파일?
+# ─────────────────────────────────────────────────────────────────────────
+# AWS 에 SSH 키페어 등록.
+# 'ssh-key-gen.bash' 가 로컬에 만든 공개키를 AWS 에 올려서, EC2 들이 같은 키로
+# SSH 받을 수 있도록 함.
+# ─────────────────────────────────────────────────────────────────────────
+
 resource "aws_key_pair" "bastion-node-key" {
-  key_name   = "ktcloud-bastion-node-key"
-  public_key = file("~/.ssh/ktcloud-bastion-node-key.pub")
+  key_name   = var.ssh_key_name              # AWS 콘솔에 보일 키 이름
+  public_key = file(var.ssh_public_key_path) # 로컬 파일에서 공개키 내용 읽어 업로드
 }
