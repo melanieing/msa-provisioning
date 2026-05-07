@@ -3,6 +3,12 @@
 Market Service MSA 프로젝트의 AWS 인프라 + Kubernetes 부트스트랩 코드.
 Terraform 으로 AWS 리소스를 만들고, Ansible 로 EC2 위에 self-managed K8s 를 구축한다.
 
+> 📋 **전체 기술 스택 + 버전 목록**: [`STACK.md`](STACK.md)
+>
+> 관련 레포:
+> - 마이크로서비스 코드: [msa-spring-boot](https://github.com/melanieing/msa-spring-boot)
+> - GitOps 매니페스트: [msa-argocd-manifest](https://github.com/melanieing/msa-argocd-manifest)
+
 ## 구성
 
 ```
