@@ -118,8 +118,9 @@
 |---|---|---|---|
 | **Java** | 21 LTS | ✅ 적용 | jvmToolchain(21) |
 | **Kotlin** | 2.3.20 | ✅ 적용 | `build.gradle.kts` |
-| **Spring Boot** | **3.5.14** | ⏳ **예정** (현재 3.3.0) | PDF 4.1절 명시. 업그레이드 작업 별도 |
-| **Spring Cloud Gateway** | Spring Boot 와 매칭 | ✅ 적용 | user-api-gateway |
+| **Gradle** | 8.14.4 | ✅ 적용 (2026-05-08) | wrapper jar 누락 fix. Spring Initializr 에서 추출 |
+| **Spring Boot** | **3.5.14** | ✅ 적용 (2026-05-08) | PDF 4.1절. `./gradlew assemble` 14개 모듈 통과 |
+| **Spring Cloud Gateway** | 4.3.0 | ✅ 적용 | user-api-gateway. Spring Boot 3.5 짝 |
 | **Resilience4j** | Spring Cloud 매칭 | ⏳ **예정** | Circuit Breaker, Fallback 미구현 |
 | **gRPC** | grpc-java 매칭 | ✅ 적용 | 서비스 간 내부 통신 (PDF 허용 범위) |
 | **QueryDSL** | kapt 통해 | ✅ 적용 | 동적 쿼리 |
@@ -220,6 +221,7 @@
 
 | 일자 | 변경 |
 |---|---|
+| 2026-05-08 | Spring Boot 3.3.0 → 3.5.14 업그레이드. Cloud Gateway 4.1.9 → 4.3.0. Gradle wrapper(8.14.4) 누락 fix |
 | 2026-05-08 | tech stack 전체 → 2026-05 기준 최신 안정 버전으로 정합성 맞춤 (Strimzi 0.45→1.0, K8s 1.30→1.35, Calico 3.27→3.32, Helm 3.14→3.20.2, kube-prometheus-stack 65→84.5, Loki 6.10→7.0, OTel 0.110→0.153, Kafka 3.8→4.2, Redis 7.0→7.4.8) |
 | 2026-05-08 | Phase B-1: platform/data 채움 (CNPG Cluster ×5 + Strimzi Kafka + Redis Cluster) |
 | 2026-05-08 | Terraform module 화 (network/security/compute/loadbalancer/storage) |

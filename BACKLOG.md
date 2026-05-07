@@ -11,17 +11,17 @@
 |---|---|
 | **마감일** | 2026-05-20 |
 | **남은 일수** | 12일 |
-| **현재 위치** | Phase B-1 완료. Phase B-2 (앱 차트 / Spring Boot 3.5 / Dockerfile) 진입 직전 |
-| **진행률** | Phase A 70%, Phase B 50%, Phase C 0%, Phase D 0% |
+| **현재 위치** | A9 Spring Boot 3.5.14 업그레이드 완료. 다음: B-2b Dockerfile |
+| **진행률** | Phase A 80%, Phase B 50%, Phase C 0%, Phase D 0% |
 | **AWS 비용 사용량** | 0 / 66,000 KRW (아직 부트스트랩 X) |
 
 ### 다음 우선순위 (순서대로)
 
-1. **🎯 [B-2a] Spring Boot 3.3.0 → 3.5.14 업그레이드** — PDF 준수 + 다른 작업의 전제
-2. **🎯 [B-2b] 5개 서비스 Dockerfile + 멀티스테이지 빌드** — 이미지 없으면 차트가 의미 없음
-3. **🎯 [B-2c] 5개 서비스 Helm 차트** (`msa-spring-boot/charts/services/*`) — ApplicationSet 자동 등록
-4. **[D-1] GitHub Actions CI** (빌드 + 이미지 push + 매니페스트 image tag bump)
-5. **[A-9] 첫 cluster-bootstrap 실제 실행** (검증)
+1. **🎯 [B-2b] 5개 서비스 Dockerfile + 멀티스테이지 빌드** — 이미지 없으면 차트가 의미 없음
+2. **🎯 [B-2c] 5개 서비스 Helm 차트** (`msa-spring-boot/charts/services/*`) — ApplicationSet 자동 등록
+3. **[D-1] GitHub Actions CI** (빌드 + 이미지 push + 매니페스트 image tag bump)
+4. **[클러스터 첫 부트스트랩]** 실제 실행 + 검증
+5. **[Phase C]** 백엔드 보강 (JWT, Rate Limit, Resilience4j, Outbox Poller)
 
 ### 🚨 위험 / 차단 요소
 
@@ -34,6 +34,13 @@
 ## ✅ 완료 (역순, 최근 → 옛날)
 
 ### 2026-05-08
+- ✅ **A9 Spring Boot 3.3.0 → 3.5.14 업그레이드** — `./gradlew assemble` 14개 모듈 모두 통과. 부가 변경:
+  - Spring Cloud Gateway 4.1.9 → 4.3.0 (Spring Boot 3.5 짝)
+  - user-api-gateway 의 webflux 하드코딩 버전 제거 (Boot plugin 자동 매니지)
+  - root 의 Spring Boot plugin → `apply false` (멀티모듈 표준 패턴)
+  - subprojects 의 라이브러리 모듈 bootJar 자동 비활성 (application 모듈에서만 override)
+  - **Gradle wrapper jar/properties 누락 fix** (Spring Initializr 에서 추출. Gradle 8.14.4)
+- ✅ **BACKLOG.md 작성** — 진행 상황 SSOT
 - ✅ **STACK.md 작성** — 전체 기술 스택 + 버전 한 페이지 카탈로그
 - ✅ **Tech stack 전체 업데이트** — 2026-05 기준 최신 안정 버전 정합성 (Strimzi 0.45→1.0, K8s 1.30→1.35, Calico 3.27→3.32, Helm 3.14→3.20.2 외)
 - ✅ **Phase B-1: platform/data 채움** — CNPG Cluster ×5 + Strimzi Kafka + Redis Cluster + 5 토픽
@@ -63,7 +70,7 @@
 | A6 | VPC Endpoint (S3, KMS) | ⏳ 미진행 | PDF 5.1절. 이그레스 비용 절감 |
 | A7 | EC2 stop/start/bootstrap/teardown 스크립트 | ✅ 완료 | 5종 PowerShell 스크립트 |
 | A8 | Ansible argocd_namespace 변수 + URL fix | ✅ 완료 | 외부 레포 수정으로 사용자가 진행 |
-| A9 | **Spring Boot 3.3.0 → 3.5.14 업그레이드** | 🎯 **다음** | PDF 4.1절 명시. msa-spring-boot 첫 코드 변경 |
+| A9 | **Spring Boot 3.3.0 → 3.5.14 업그레이드** | ✅ **완료** (2026-05-08) | + Cloud Gateway 4.1.9→4.3.0, multi-module bootJar 설정 정리, gradle wrapper 누락 fix |
 | A10 | **5개 서비스 Dockerfile** + 멀티스테이지 빌드 | 🎯 **다음** | 이미지 없으면 Helm 차트 의미 없음 |
 | A+ | NAT Gateway 1개로 줄이기 (선택) | ⏳ 검토 | 시간당 60원 절감. HA 손해. 4h/일 운영 시 사실상 불필요 |
 
@@ -87,10 +94,11 @@
 
 | ID | 항목 | 상태 | 위치 | 우선순위 |
 |---|---|---|---|---|
-| B6a | user-api-gateway Helm 차트 | ⏳ | `msa-spring-boot/charts/services/user-api-gateway/` | 🎯 다음 |
-| B6b | product-service Helm 차트 | ⏳ | `charts/services/product-service/` | 🎯 다음 |
-| B6c | order-service Helm 차트 | ⏳ | `charts/services/order-service/` | 🎯 다음 |
-| B6d | inventory-service Helm 차트 | ⏳ | `charts/services/inventory-service/` | 🎯 다음 |
+| B-2b | **4개 서비스 Dockerfile + .dockerignore** | 🟡 **진행 중** (2026-05-08) | 멀티스테이지 + Spring Boot layered jar |
+| B6a | user-api-gateway Helm 차트 | ⏳ | `msa-spring-boot/charts/services/user-api-gateway/` | 후속 |
+| B6b | product-service Helm 차트 | ⏳ | `charts/services/product-service/` | 후속 |
+| B6c | order-service Helm 차트 | ⏳ | `charts/services/order-service/` | 후속 |
+| B6d | inventory-service Helm 차트 | ⏳ | `charts/services/inventory-service/` | 후속 |
 | B6e | notification-service Helm 차트 | ⏳ | `charts/services/notification-service/` | 후순위 (서비스 자체 미구현) |
 
 각 차트 골격: Chart.yaml + values.yaml + templates/{deployment,service,configmap,hpa}.yaml
@@ -175,4 +183,5 @@ Day 13  (5/20)     : 발표
 
 | 일자 | 변경 |
 |---|---|
+| 2026-05-08 | A9 Spring Boot 3.3.0 → 3.5.14 업그레이드 완료. Gradle wrapper 누락 fix 포함. |
 | 2026-05-08 | 백로그 파일 신규 작성 (BACKLOG.md) |
