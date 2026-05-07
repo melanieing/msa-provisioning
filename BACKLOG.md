@@ -11,13 +11,13 @@
 |---|---|
 | **마감일** | 2026-05-20 |
 | **남은 일수** | 12일 |
-| **현재 위치** | 🎉 D-1 첫 ECR push 성공 (2026-05-08). 다음: B-2c Helm 차트 5개 |
-| **진행률** | Phase A 90%, Phase B 60%, Phase C 0%, Phase D 50% |
+| **현재 위치** | B-2c user-api-gateway Helm 차트 완료. 다음: B-2d/e/f 3개 (같은 패턴 복제) |
+| **진행률** | Phase A 90%, Phase B 70%, Phase C 0%, Phase D 50% |
 | **AWS 비용 사용량** | 부트스트랩 시작 (시간당 ~553 KRW. EC2 stop 시 ~180 KRW) |
 
 ### 다음 우선순위 (순서대로)
 
-1. **🎯 [B-2c] 5개 서비스 Helm 차트** (`msa-spring-boot/charts/services/*`) — ApplicationSet 자동 등록 + ECR 이미지 참조
+1. **🎯 [B-2d/e/f] 3개 서비스 Helm 차트** — user-api-gateway 패턴 복제 + 차이점만 수정 (gRPC 포트 추가)
 2. **[클러스터 첫 부트스트랩]** `cluster-start.ps1` + ansible — K8s + Argo CD 띄우고 실제 deploy 검증
 3. **[D1-e]** 매니페스트 tag bump 자동화 (선택 — 또는 Argo CD Image Updater)
 4. **[Phase C]** 백엔드 보강 (JWT, Rate Limit, Resilience4j, Outbox Poller)
@@ -33,6 +33,8 @@
 ## ✅ 완료 (역순, 최근 → 옛날)
 
 ### 2026-05-08
+- ✅ **B-2c user-api-gateway Helm 차트 작성** — Chart.yaml + values.yaml + 5 templates (deployment, service, configmap, serviceaccount, _helpers.tpl). non-root securityContext + actuator liveness/readiness probes + ECR image. helm lint + template render 통과.
+- ✅ **Phase B ID 체계 통일** — B1~B8 → B-1a~g, B6a~e → B-2c~g (sub-phase 일관성).
 - ✅ **🎉 D-1 첫 빌드 성공 — ECR 에 4개 이미지 push 완료** (4분 11초). registry: `601766312629.dkr.ecr.ap-northeast-2.amazonaws.com`. 각 서비스마다 `<git_sha> + latest` 두 태그.
 - ✅ **D1-d GitHub Actions workflow 작성** — `.github/workflows/build-and-push.yml`. 단일 yaml + **matrix 전략** (4개 서비스 병렬 빌드) + **OIDC 페더레이션** (GitHub Secrets 미사용) + `aws-actions/amazon-ecr-login` + `docker/build-push-action` (GHA layer cache, 2회차 빌드 단축). 두 태그 (`git sha` + `latest`) 동시 push.
 - ✅ **5개 PowerShell 스크립트 영어 메시지로 재작성** — 사용자 PowerShell 의 한글 인코딩 깨짐 fix. `[Console]::OutputEncoding = UTF8` 도 보강.
@@ -89,26 +91,27 @@
 
 | ID | 항목 | 상태 | 비고 |
 |---|---|---|---|
-| B1 | 매니페스트 리포 폴더 구조 | ✅ 완료 | bootstrap/projects/platform/applications |
-| B2 | App-of-Apps Root + Sync Wave | ✅ 완료 | 표준 정책 + finalizer 설정 |
-| B3 | CNPG Helm + 5 PostgreSQL Cluster | ✅ 완료 | namespace `data` + Cluster CRD ×5 |
-| B4 | Strimzi Kafka KRaft 3-broker | ✅ 완료 | 1.0.0 + Kafka 4.2.0 + KafkaTopic ×5 |
-| B5 | Redis Operator + RedisCluster | ✅ 완료 | 3 master + 3 replica + 평문 Secret (학습용) |
-| B7 | ApplicationSet (Git Generator) | ✅ 완료 | charts/services/* watch (아직 빈 상태) |
-| B8 | Sync Policy 표준화 | ✅ 완료 | prune/selfHeal/CreateNamespace/ServerSideApply |
+| B-1a | 매니페스트 리포 폴더 구조 | ✅ 완료 | bootstrap/projects/platform/applications |
+| B-1b | App-of-Apps Root + Sync Wave | ✅ 완료 | 표준 정책 + finalizer 설정 |
+| B-1c | CNPG Helm + 5 PostgreSQL Cluster | ✅ 완료 | namespace `data` + Cluster CRD ×5 |
+| B-1d | Strimzi Kafka KRaft 3-broker | ✅ 완료 | 1.0.0 + Kafka 4.2.0 + KafkaTopic ×5 |
+| B-1e | Redis Operator + RedisCluster | ✅ 완료 | 3 master + 3 replica + 평문 Secret (학습용) |
+| B-1f | ApplicationSet (Git Generator) | ✅ 완료 | charts/services/* watch (아직 빈 상태) |
+| B-1g | Sync Policy 표준화 | ✅ 완료 | prune/selfHeal/CreateNamespace/ServerSideApply |
 
-### B-2: 마이크로서비스 차트 (다음 차례)
+### B-2: 마이크로서비스 차트화 (지금)
 
-| ID | 항목 | 상태 | 위치 | 우선순위 |
-|---|---|---|---|---|
-| B-2b | **4개 서비스 Dockerfile + .dockerignore** | ✅ 완료 (2026-05-08) | 멀티스테이지 + layered jar + non-root + healthcheck |
-| B6a | user-api-gateway Helm 차트 | ⏳ | `msa-spring-boot/charts/services/user-api-gateway/` | 후속 |
-| B6b | product-service Helm 차트 | ⏳ | `charts/services/product-service/` | 후속 |
-| B6c | order-service Helm 차트 | ⏳ | `charts/services/order-service/` | 후속 |
-| B6d | inventory-service Helm 차트 | ⏳ | `charts/services/inventory-service/` | 후속 |
-| B6e | notification-service Helm 차트 | ⏳ | `charts/services/notification-service/` | 후순위 (서비스 자체 미구현) |
+| ID | 항목 | 상태 | 위치 |
+|---|---|---|---|
+| B-2a | bootJar 활성화 패턴 (root + service 4개 build.gradle.kts) | ✅ 완료 (2026-05-08) | A9 와 함께 진행됨 |
+| B-2b | 4개 서비스 Dockerfile + .dockerignore | ✅ 완료 (2026-05-08) | 멀티스테이지 + layered jar + non-root + healthcheck |
+| B-2c | **user-api-gateway Helm 차트** | ✅ **완료** (2026-05-08) | Chart.yaml + values.yaml + templates(deployment/service/configmap/serviceaccount/_helpers). helm lint + template OK |
+| B-2d | product-service Helm 차트 | ⏳ | `charts/services/product-service/` (B-2c 패턴 복제) |
+| B-2e | order-service Helm 차트 | ⏳ | `charts/services/order-service/` |
+| B-2f | inventory-service Helm 차트 | ⏳ | `charts/services/inventory-service/` |
+| B-2g | notification-service Helm 차트 | ⏳ | `charts/services/notification-service/` (서비스 자체 미구현, 후순위) |
 
-각 차트 골격: Chart.yaml + values.yaml + templates/{deployment,service,configmap,hpa}.yaml
+각 차트 골격: Chart.yaml + values.yaml + templates/{deployment,service,configmap,_helpers.tpl}
 
 ---
 
@@ -196,6 +199,8 @@ Day 13  (5/20)     : 발표
 
 | 일자 | 변경 |
 |---|---|
+| 2026-05-08 | B-2c user-api-gateway Helm 차트 작성 (Chart.yaml + values.yaml + 5 templates). |
+| 2026-05-08 | Phase B ID 체계 통일: B1~B8 → B-1a~g, B6a~e → B-2c~g (sub-phase 일관성 확보). |
 | 2026-05-08 | D1-d GitHub Actions workflow 추가 (matrix + OIDC + ECR push). PowerShell 스크립트 영어로 재작성. 첫 terraform apply 성공. |
 | 2026-05-08 | D1-a/b/c Terraform: ECR ×4 + KMS + lifecycle + GitHub OIDC provider + assume role + 노드 ECR Pull 권한. |
 | 2026-05-08 | B-2b 4개 서비스 Dockerfile + .dockerignore. 멀티스테이지 + Spring Boot layered jar + non-root + healthcheck 패턴. |
