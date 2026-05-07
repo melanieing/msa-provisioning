@@ -10,7 +10,7 @@
 {# ────────────────────────────────────────────────────────────────────── #}
 apiVersion: kubeadm.k8s.io/v1beta3
 kind: ClusterConfiguration
-kubernetesVersion: v1.30.0
+kubernetesVersion: v1.35.4                  # 2026-04-15 release. k8s-pkg-install 의 v1.35 와 일치
 
 # 컨트롤플레인 진입점 = NLB DNS 주소.
 # kubectl/kubeadm 클라이언트가 이 주소로 접속 → NLB 가 살아있는 master 로 분기.

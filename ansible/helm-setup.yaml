@@ -8,14 +8,15 @@
 #
 # 설치 방법:
 #   공식 GitHub Release 에서 tarball 다운로드 → 압축 풀고 → /usr/local/bin/helm 으로 복사.
-#   v3.14.0 사용 (안정 버전).
+#   v3.20.2 사용 (2026-04-09 release, Helm 3.x 마지막 안정 patch).
+#   Helm 4.x 는 2026-04 에 나왔지만 차트 호환성 미검증이라 보수적으로 3.x 유지.
 # ─────────────────────────────────────────────────────────────────────────
 
 - name: Helm 설치
   hosts: main-master
   become: true
   vars:
-    helm_version: "v3.14.0"                        # 사용할 Helm 버전
+    helm_version: "v3.20.2"                        # 2026-04-09 최신 안정 (Helm 3.x 마지막 patch)
     arch: "amd64"                                  # CPU 아키텍처 (EC2 t3 = x86_64 = amd64)
 
   tasks:

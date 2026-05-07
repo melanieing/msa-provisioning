@@ -4,7 +4,7 @@
 #   - kubeadm : 클러스터 부트스트랩 도구 (init/join 명령 제공)
 #   - kubectl : K8s API 호출하는 CLI 도구
 #
-# 버전: v1.30 (kubernetes 공식 yum repo 사용)
+# 버전: v1.35 (kubernetes 공식 yum repo 사용. 2026-05 기준 latest-1, 안정적 선택)
 # ─────────────────────────────────────────────────────────────────────────
 
 - name: Kubernetes 패키지 설치
@@ -13,7 +13,7 @@
   tasks:
 
     # ─── 1. K8s yum 저장소 추가 ────────────────────────────────────
-    # pkgs.k8s.io 는 K8s 공식 패키지 저장소. v1.30 의 stable 채널 사용.
+    # pkgs.k8s.io 는 K8s 공식 패키지 저장소. v1.35 의 stable 채널 사용.
     # gpgcheck=1 : 패키지 서명 검증 (보안)
     - name: Kubernetes yum 저장소 추가
       ansible.builtin.copy:
@@ -22,10 +22,10 @@
         content: |
           [kubernetes]
           name=Kubernetes
-          baseurl=https://pkgs.k8s.io/core:/stable:/v1.30/rpm/
+          baseurl=https://pkgs.k8s.io/core:/stable:/v1.35/rpm/
           enabled=1
           gpgcheck=1
-          gpgkey=https://pkgs.k8s.io/core:/stable:/v1.30/rpm/repodata/repomd.xml.key
+          gpgkey=https://pkgs.k8s.io/core:/stable:/v1.35/rpm/repodata/repomd.xml.key
 
     # ─── 2. dnf 캐시 초기화 ────────────────────────────────────────
     # 새 저장소 추가 후 캐시가 오래된 정보 가지고 있으면 설치 실패함.
