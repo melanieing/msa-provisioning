@@ -1,44 +1,75 @@
-- name: Kubernetesクラスタのマスターノードの初期化
-  hosts: main-master
+# ─────────────────────────────────────────────────────────────────────────
+# 이 파일은 뭐 하는 파일?
+# ─────────────────────────────────────────────────────────────────────────
+# 'main-master' (= b-master-01) 한 대에서 'kubeadm init' 실행.
+# 이 명령으로 K8s 컨트롤플레인의 첫 번째 노드가 탄생함. 나머지 master 2대 + worker 3대는
+# 이 노드에서 발급된 토큰을 받아서 join 함.
+#
+# 왜 main-master 한 대에서만?
+#   kubeadm init 은 클러스터 전체를 처음 만드는 작업이라 한 번만 실행되어야 함.
+#   다른 노드들은 'kubeadm join' 으로 합류하는 다른 명령을 사용.
+#
+# --upload-certs 옵션:
+#   다른 master 노드들이 join 할 때 필요한 control plane 인증서를
+#   K8s Secret 으로 임시 업로드 → 다른 master 가 받아갈 수 있게 해줌.
+# ─────────────────────────────────────────────────────────────────────────
+
+- name: 메인 마스터 노드 초기화 (kubeadm init)
+  hosts: main-master                               # inventory 의 'main-master' 그룹 = b-master-01
   become: true
   tasks:
-    - name: containerdサービスの開始と有効化
+
+    # ─── 1. containerd 시작 보장 ──────────────────────────────────
+    # containerd-setup.yaml 에서 이미 시작됐겠지만 재확인. (멱등 안전장치)
+    - name: containerd 서비스 시작 + enable 재확인
       ansible.builtin.systemd:
         name: containerd
         state: started
         enabled: true
 
-    - name: Kubernetesの設定ディレクトリを作成
+    # ─── 2. 설정 디렉토리 만들기 ──────────────────────────────────
+    - name: /etc/kubernetes 디렉토리 생성
       ansible.builtin.file:
         path: /etc/kubernetes
         state: directory
         mode: "0755"
       become: true
 
-    - name: kubeadmの設定ファイルをテンプレートから生成
+    # ─── 3. kubeadm 설정 파일 템플릿 렌더링 ───────────────────────
+    # configuration/kubeadm-config.yaml.j2 를 읽어서 변수 치환 후 노드에 전송.
+    # 이 파일에 NLB DNS 주소(=control plane endpoint)와 podSubnet 같은 핵심 설정이 들어있음.
+    - name: kubeadm-config.yaml 생성 (Jinja2 템플릿)
       ansible.builtin.template:
         src: ./configuration/kubeadm-config.yaml.j2
         dest: /etc/kubernetes/kubeadm-config.yaml
         mode: "0644"
 
-    - name: kubeadm initコマンドの実行
+    # ─── 4. 본격 'kubeadm init' 실행 (클러스터 탄생!) ─────────────
+    # creates: /etc/kubernetes/admin.conf
+    #   → 이 파일이 이미 있으면 init 스킵 (이미 init 됐다는 뜻). 멱등성 확보.
+    # --upload-certs: 다른 master 들이 가져갈 인증서를 임시로 업로드.
+    - name: kubeadm init 실행
       ansible.builtin.shell: |
         kubeadm init --config /etc/kubernetes/kubeadm-config.yaml --upload-certs
       register: init_output
       args:
         creates: /etc/kubernetes/admin.conf
 
-    - name: kubectlのためのkubeconfig設定
+    # ─── 5. ec2-user 가 kubectl 사용하도록 admin.conf 복사 ────────
+    # admin.conf = "이 클러스터의 superuser 인증정보". 보통 root 만 접근 가능한데,
+    # ec2-user 도 kubectl 쓰려면 자기 홈 디렉토리에 복사 필요.
+
+    - name: ~/.kube 디렉토리 생성
       ansible.builtin.file:
         path: /home/ec2-user/.kube
         state: directory
         mode: "0755"
         owner: ec2-user
 
-    - name: configファイルのコピー
+    - name: admin.conf 를 ~/.kube/config 로 복사
       ansible.builtin.copy:
         src: /etc/kubernetes/admin.conf
         dest: /home/ec2-user/.kube/config
-        remote_src: true
+        remote_src: true                           # 원격 노드에서 원격 노드로 복사 (로컬 X)
         owner: ec2-user
-        mode: "0600"
+        mode: "0600"                               # 인증정보라 본인만 읽도록 잠금

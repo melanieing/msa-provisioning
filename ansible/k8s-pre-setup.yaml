@@ -1,12 +1,30 @@
-- name: Kubernetesクラスタの前提条件の設定
-  hosts: all
-  become: true
+# ─────────────────────────────────────────────────────────────────────────
+# 이 파일은 뭐 하는 파일?
+# ─────────────────────────────────────────────────────────────────────────
+# 모든 노드(master + worker + bastion 도 포함)에 K8s 가 요구하는 OS 사전 조건을 적용.
+# K8s 가 정상 동작하려면 OS 가 특정 상태에 있어야 함:
+#   1) swap 끄기      : kubelet 은 swap 켜진 환경에서 시작 거부함
+#   2) 커널 모듈 로드 : Pod 네트워킹/Service iptables 가 의존
+#   3) sysctl 설정    : 브릿지 트래픽이 iptables 를 거치도록 강제
+#   4) /etc/hosts     : 노드끼리 호스트네임으로 서로 찾을 수 있게
+# ─────────────────────────────────────────────────────────────────────────
+
+- name: K8s 클러스터 사전 조건 설정
+  hosts: all                                       # 그룹 'all' = inventory 의 모든 노드
+  become: true                                     # sudo 권한으로 실행 (시스템 설정 변경)
   tasks:
-    - name: スワップの無効化
+
+    # ─── 1. swap 끄기 ─────────────────────────────────────────────
+    # swap 이 켜져있으면 kubelet 이 시작을 거부함 (K8s 1.22+ 부터 강제).
+    # ansible_swaptotal_mb > 0 → 이미 swap 이 0 이면 명령 스킵.
+    - name: swap 비활성화
       ansible.builtin.command: swapoff -a
       when: ansible_swaptotal_mb > 0
 
-    - name: カーネルモジュールのロード
+    # ─── 2. 커널 모듈 로드 ─────────────────────────────────────────
+    # overlay      : 컨테이너 파일시스템(OverlayFS) 용
+    # br_netfilter : 브릿지 네트워크가 iptables 를 거치게 함 (kube-proxy 가 iptables 룰 사용)
+    - name: 커널 모듈 로드 (overlay, br_netfilter)
       modprobe:
         name: "{{ item }}"
         state: present
@@ -14,13 +32,19 @@
         - overlay
         - br_netfilter
 
-    - name: ブリッジネットワーク設定の適用
+    # ─── 3. 브릿지 네트워크 sysctl 설정 ────────────────────────────
+    # 브릿지(예: cni0) 를 통과하는 트래픽이 iptables 룰을 적용받도록 해야
+    # Service IP 같은 게 동작함. 이거 안 하면 Pod 간 통신 일부가 안 됨.
+    - name: 브릿지 네트워크 sysctl 적용 (net.bridge.bridge-nf-call-iptables)
       ansible.builtin.sysctl:
         name: net.bridge.bridge-nf-call-iptables
         value: "1"
         state: present
 
-    - name: /etc/hostsファイルにマスターノードのエントリを追加
+    # ─── 4. /etc/hosts 에 master 노드 IP/이름 매핑 추가 ────────────
+    # K8s control plane 노드들이 NLB 가 아닌 직접 통신 시 호스트네임으로 찾을 수 있게.
+    # 변수(a_master_01_private_ip 등)는 inventory.ini 의 [all:vars] 에서 들어옴.
+    - name: /etc/hosts 에 마스터 노드 엔트리 추가
       lineinfile:
         path: /etc/hosts
         line: "{{ item.ip }} {{ item.name }}"

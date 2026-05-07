@@ -1,8 +1,23 @@
-- name: Kubernetesパッケージのインストール
+# ─────────────────────────────────────────────────────────────────────────
+# 이 파일은 뭐 하는 파일?
+# ─────────────────────────────────────────────────────────────────────────
+# 모든 노드에 Kubernetes 패키지 3종 설치:
+#   - kubelet : 각 노드에서 도는 K8s 에이전트 (Pod 띄우는 실무자)
+#   - kubeadm : 클러스터 부트스트랩 도구 (init/join 명령 제공)
+#   - kubectl : K8s API 호출하는 CLI 도구
+#
+# 버전: v1.30 (kubernetes 공식 yum repo 사용)
+# ─────────────────────────────────────────────────────────────────────────
+
+- name: Kubernetes 패키지 설치
   hosts: all
   become: true
   tasks:
-    - name: Kubernetesリポジトリの追加
+
+    # ─── 1. K8s yum 저장소 추가 ────────────────────────────────────
+    # pkgs.k8s.io 는 K8s 공식 패키지 저장소. v1.30 의 stable 채널 사용.
+    # gpgcheck=1 : 패키지 서명 검증 (보안)
+    - name: Kubernetes yum 저장소 추가
       ansible.builtin.copy:
         dest: /etc/yum.repos.d/kubernetes.repo
         mode: "0644"
@@ -14,11 +29,14 @@
           gpgcheck=1
           gpgkey=https://pkgs.k8s.io/core:/stable:/v1.30/rpm/repodata/repomd.xml.key
 
-    - name: dnfキャッシュのクリア
+    # ─── 2. dnf 캐시 초기화 ────────────────────────────────────────
+    # 새 저장소 추가 후 캐시가 오래된 정보 가지고 있으면 설치 실패함.
+    - name: dnf 캐시 초기화
       ansible.builtin.shell: dnf clean all
       become: true
 
-    - name: kubelet、kubeadm、kubectlのインストール
+    # ─── 3. kubelet/kubeadm/kubectl 설치 ─────────────────────────
+    - name: kubelet, kubeadm, kubectl 설치
       ansible.builtin.dnf:
         name:
           - kubelet
@@ -26,7 +44,10 @@
           - kubectl
         state: present
 
-    - name: kubeletサービスの有効化
+    # ─── 4. kubelet 부팅 시 자동 시작 설정 ─────────────────────────
+    # enabled: true 만 함. 'state: started' 안 함 → 지금 당장 시작은 안 시킴.
+    # kubeadm init 또는 join 시점에 알아서 시작됨.
+    - name: kubelet 서비스 enable
       ansible.builtin.systemd:
         name: kubelet
         enabled: true

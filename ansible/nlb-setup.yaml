@@ -1,21 +1,43 @@
-- name: AWS Load Balancer Controller設置
+# ─────────────────────────────────────────────────────────────────────────
+# 이 파일은 뭐 하는 파일?
+# ─────────────────────────────────────────────────────────────────────────
+# AWS Load Balancer Controller (LBC) 설치.
+#
+# LBC 가 뭐 하는 놈인데?
+#   K8s 의 Service(type=LoadBalancer) 또는 Ingress 리소스를 만들면, 자동으로
+#   AWS ALB/NLB 를 생성해주는 컨트롤러. 우리가 직접 ALB 만들 필요 없이 yaml 한 장이면 됨.
+#
+# 우리는 EKS 가 아닌데 왜 EKS Helm 차트 사용?
+#   LBC 는 원래 EKS 용으로 만들어졌지만, kubeadm 자체 구축한 클러스터에서도 정상 작동함.
+#   (EC2 인스턴스에 IAM 권한만 있으면 됨 — iam.tf 에서 부여한 instance profile 사용)
+#
+# vpc_id 같은 변수는 어디서?
+#   inventory.ini 의 [all:vars] 에 정의됨 (Terraform 이 templatefile 로 주입).
+# ─────────────────────────────────────────────────────────────────────────
+
+- name: AWS Load Balancer Controller 설치
   hosts: main-master
   become: true
   vars:
-    cluster_name: "kt-cloud-cluster"
-    aws_region: "ap-northeast-2"
-    lbc_namespace: "kube-system"
+    cluster_name: "kt-cloud-cluster"               # LBC 가 자기 클러스터 식별용 이름
+    aws_region: "ap-northeast-2"                   # ALB/NLB 만들 region
+    lbc_namespace: "kube-system"                   # LBC 가 살 네임스페이스
 
   tasks:
-    - name: EKS Helmリポジトリの追加
+
+    # ─── 1. EKS Helm 저장소 추가 ──────────────────────────────────
+    # AWS 공식 Helm 저장소. LBC 차트 여기서 가져옴.
+    - name: EKS Helm 저장소 추가 (https://aws.github.io/eks-charts)
       kubernetes.core.helm_repository:
         name: eks
         repo_url: "https://aws.github.io/eks-charts"
 
-    - name: Helmリポジトリの更新
+    - name: Helm 저장소 인덱스 갱신
       command: helm repo update
 
-    - name: AWS Load Balancer Controllerのインストール
+    # ─── 2. LBC 본체 설치 ──────────────────────────────────────────
+    # Helm 으로 차트 설치. values 는 이 yaml 안에서 직접 지정.
+    - name: AWS Load Balancer Controller Helm 차트 설치
       kubernetes.core.helm:
         name: aws-load-balancer-controller
         chart_ref: eks/aws-load-balancer-controller
@@ -25,8 +47,8 @@
         values:
           clusterName: "{{ cluster_name }}"
           serviceAccount:
-            create: true
+            create: true                           # K8s ServiceAccount 자동 생성
             name: aws-load-balancer-controller
-          vpcId: "{{ vpc_id }}"
+          vpcId: "{{ vpc_id }}"                    # inventory.ini 에서 주입된 VPC ID
           region: "{{ aws_region }}"
       register: helm_install_result

@@ -1,30 +1,56 @@
-- name: Kubernetesクラスタのクリーンアップ
-  hosts: all
+# ─────────────────────────────────────────────────────────────────────────
+# 이 파일은 뭐 하는 파일?
+# ─────────────────────────────────────────────────────────────────────────
+# K8s 클러스터를 깨끗하게 청소 (= 'kubeadm reset' + 잔여물 삭제).
+#
+# 언제 쓰면 좋을까?
+#   - kubeadm init/join 이 꼬여서 처음부터 다시 시작하고 싶을 때
+#   - 클러스터 셋업 중 에러 나서 노드 상태 reset 필요할 때
+#   - terraform destroy 전에 cluster 잔여 리소스 정리하고 싶을 때
+#
+# main.yaml 에 포함 X — 필요할 때만 직접 실행:
+#   ansible-playbook -i inventory.ini k8s-clear.yaml
+#
+# ⚠️ 주의: 이 playbook 은 모든 K8s 상태를 초기화함. 실행 후 main.yaml 다시 돌려야 함.
+# ─────────────────────────────────────────────────────────────────────────
+
+- name: K8s 클러스터 청소
+  hosts: all                                       # 모든 노드에서 실행
   become: true
   tasks:
-    - name: kubeadm resetコマンドの実行
+
+    # ─── 1. kubeadm reset ──────────────────────────────────────────
+    # kubelet 중지 + iptables 룰 제거 + control plane 컴포넌트 제거.
+    # -f : "정말로?" 프롬프트 스킵 (자동화)
+    - name: kubeadm reset 실행 (강제)
       ansible.builtin.shell: |
         kubeadm reset -f --cri-socket unix:///var/run/containerd/containerd.sock
       register: reset_result
       changed_when: true
 
-    - name: Kubernetes関連のディレクトリとファイルの削除
+    # ─── 2. K8s 관련 디렉토리 통째로 삭제 ─────────────────────────
+    # kubeadm reset 이 100% 다 지우진 않아서 잔여 파일 직접 삭제.
+    - name: K8s 디렉토리/파일 잔여물 삭제
       ansible.builtin.file:
         path: "{{ item }}"
-        state: absent
+        state: absent                              # 'absent' = 없는 상태로 만들기 (= 삭제)
       loop:
-        - /etc/kubernetes/
-        - /var/lib/etcd/
-        - /var/lib/kubelet/
-        - /etc/cni/net.d/
-        - /var/lib/cni/
+        - /etc/kubernetes/                         # K8s 설정 파일들
+        - /var/lib/etcd/                           # etcd 데이터 (master 만 있음)
+        - /var/lib/kubelet/                        # kubelet 상태
+        - /etc/cni/net.d/                          # CNI 설정
+        - /var/lib/cni/                            # CNI 상태
 
-    - name: kubeconfigファイルの削除
+    # ─── 3. ec2-user 의 kubeconfig 도 삭제 ────────────────────────
+    - name: ~/.kube 삭제
       ansible.builtin.file:
         path: /home/ec2-user/.kube/
         state: absent
 
-    - name: ネットワークインターフェースのクリーンアップ
+    # ─── 4. CNI 가 만든 네트워크 인터페이스 삭제 ──────────────────
+    # kubeadm reset 은 가상 네트워크 인터페이스(cni0, flannel.1, cali*) 안 지움.
+    # 다음 init 때 충돌하지 않게 직접 삭제. 없는 인터페이스 삭제 시도해도 OK (|| true).
+    - name: CNI 가상 네트워크 인터페이스 정리
       ansible.builtin.shell: |
         ip link delete cni0 || true
         ip link delete flannel.1 || true
@@ -32,7 +58,8 @@
       changed_when: true
       ignore_errors: true
 
-    - name: containerdサービスの再起動
+    # ─── 5. containerd 재시작 (찌꺼기 컨테이너 정리용) ────────────
+    - name: containerd 재시작
       ansible.builtin.systemd:
         name: containerd
         state: restarted

@@ -1,31 +1,57 @@
-- name: containerdのセットアップ
+# ─────────────────────────────────────────────────────────────────────────
+# 이 파일은 뭐 하는 파일?
+# ─────────────────────────────────────────────────────────────────────────
+# 모든 노드에 컨테이너 런타임 'containerd' 설치 + K8s 호환 설정.
+#
+# 컨테이너 런타임이란?
+#   실제로 컨테이너를 띄우고 관리하는 엔진. Docker 의 핵심 부분만 분리한 것이 containerd.
+#   K8s 1.24+ 부터 Docker 직접 지원 종료됐고, containerd 가 사실상 표준.
+#
+# 핵심 설정 두 가지:
+#   1. SystemdCgroup = true   : kubelet 의 cgroup 드라이버(systemd) 와 일치시킴
+#                                불일치 시 kubelet 시작 실패 (자주 만나는 함정).
+#   2. ip_forward = 1         : 노드가 Pod 트래픽을 다른 노드로 라우팅 가능하게 함
+# ─────────────────────────────────────────────────────────────────────────
+
+- name: containerd 설치 및 설정
   hosts: all
   become: true
   tasks:
-    - name: containerdのインストール
+
+    # ─── 1. containerd 패키지 설치 ─────────────────────────────────
+    - name: containerd 설치
       ansible.builtin.dnf:
         name: containerd
         state: present
 
-    - name: containerdの初期設定ファイルの生成
+    # ─── 2. 기본 설정 파일 생성 ────────────────────────────────────
+    # 'containerd config default' 는 기본 설정을 stdout 으로 출력함. 그걸 파일로 저장.
+    - name: containerd 기본 설정 파일 생성
       ansible.builtin.shell: |
         mkdir -p /etc/containerd
         containerd config default > /etc/containerd/config.toml
 
-    - name: SystemdCgroupの有効化
+    # ─── 3. SystemdCgroup 옵션을 false → true 로 변경 ────────────
+    # K8s 가 systemd 를 cgroup 드라이버로 쓰는데, containerd 기본값은 false 라서 충돌.
+    # 이 한 줄 안 바꾸면 kubelet 이 "cgroup driver mismatch" 에러로 시작 못 함.
+    - name: SystemdCgroup = true 로 변경
       ansible.builtin.replace:
         path: /etc/containerd/config.toml
         regexp: "SystemdCgroup = false"
         replace: "SystemdCgroup = true"
 
-    - name: IPv4ポワーディングの有効化
+    # ─── 4. IPv4 포워딩 활성화 ─────────────────────────────────────
+    # 노드가 라우터 역할도 해야 Pod-to-Pod 통신이 노드 간에 됨.
+    # reload: true → /etc/sysctl.conf 에 반영 + 즉시 적용.
+    - name: IPv4 forwarding 활성화 (net.ipv4.ip_forward=1)
       ansible.builtin.sysctl:
         name: net.ipv4.ip_forward
         value: "1"
         state: present
         reload: true
 
-    - name: containerdサービスの有効化と開始
+    # ─── 5. containerd 서비스 시작 + 부팅 시 자동 시작 ────────────
+    - name: containerd 서비스 시작 및 enable
       ansible.builtin.systemd:
         name: containerd
         state: started

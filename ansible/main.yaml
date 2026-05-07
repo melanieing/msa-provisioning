@@ -1,16 +1,43 @@
+# ─────────────────────────────────────────────────────────────────────────
+# 이 파일은 뭐 하는 파일?
+# ─────────────────────────────────────────────────────────────────────────
+# Ansible 의 "메인 진입점". 'ansible-playbook -i inventory.ini main.yaml' 실행 시
+# 아래 11개 playbook 을 위에서 아래 순서로 자동 실행함.
+#
+# 전체 흐름 (각 단계가 끝나야 다음으로 넘어감):
+#   1. k8s-pre-setup     : 모든 노드의 OS 사전 설정 (swap off, 커널 모듈 등)
+#   2. k8s-pkg-install   : kubelet/kubeadm/kubectl 설치 (모든 노드)
+#   3. containerd-setup  : 컨테이너 런타임 설치 (모든 노드)
+#
+#   4. master-init       : main-master 에서 'kubeadm init' 실행 → 컨트롤플레인 1번 노드 탄생
+#   5. master-cni-setup  : Calico CNI 설치 (Pod 네트워크)
+#   6. master-python-setup : kubectl Ansible 모듈 사용 위한 Python 라이브러리 설치
+#
+#   7. join-master       : 나머지 master 2대를 control plane 으로 join
+#   8. join-worker       : worker 3대를 cluster 에 join → 6 nodes Ready
+#
+#   9. helm-setup        : Helm CLI 다운로드/설치 (master 에)
+#  10. nlb-setup         : AWS Load Balancer Controller 설치 (Helm)
+#  11. argocd-setup      : Argo CD 설치 + root Application 생성 → GitOps 시작!
+#
+# ⚠️ 'traefik-setup.yaml' 은 여기 포함 안 됨 (현재 사용 안 함, 고아 파일).
+# ─────────────────────────────────────────────────────────────────────────
+
+# ─── 1단계: 모든 노드 OS 사전 준비 ──────────────────────────────────
 - import_playbook: k8s-pre-setup.yaml
 - import_playbook: k8s-pkg-install.yaml
 - import_playbook: containerd-setup.yaml
 
+# ─── 2단계: 메인 마스터 1대 초기화 + CNI 설치 ──────────────────────
 - import_playbook: master-init.yaml
 - import_playbook: master-cni-setup.yaml
 - import_playbook: master-python-setup.yaml
 
+# ─── 3단계: 나머지 노드들 join ─────────────────────────────────────
 - import_playbook: join-master.yaml
 - import_playbook: join-worker.yaml
 
+# ─── 4단계: Helm + AWS LBC + Argo CD 설치 ─────────────────────────
 - import_playbook: helm-setup.yaml
-
 - import_playbook: nlb-setup.yaml
-
 - import_playbook: argocd-setup.yaml

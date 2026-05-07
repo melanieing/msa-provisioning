@@ -1,13 +1,31 @@
-- name: MasterノードにPythonとKubernetesライブラリをインストール
+# ─────────────────────────────────────────────────────────────────────────
+# 이 파일은 뭐 하는 파일?
+# ─────────────────────────────────────────────────────────────────────────
+# main-master 에 Python 라이브러리 설치.
+#
+# 왜 필요?
+#   Ansible 의 'kubernetes.core.k8s', 'kubernetes.core.helm' 같은 모듈이
+#   내부적으로 Python 의 'kubernetes' 라이브러리를 사용함. 이게 없으면 모듈 호출 시 에러.
+#   argocd-setup.yaml, nlb-setup.yaml, traefik-setup.yaml 등이 이 모듈을 사용.
+#
+# 설치 위치:
+#   main-master 한 대만. Helm/Argo CD 같은 명령은 main-master 에서만 실행되니까.
+# ─────────────────────────────────────────────────────────────────────────
+
+- name: 메인 마스터에 Python + Kubernetes 라이브러리 설치
   hosts: main-master
   become: true
   tasks:
-    - name: Python3-pipインストール
+
+    # python3-pip : Python 패키지 매니저
+    - name: python3-pip 설치
       yum:
         name: python3-pip
         state: present
 
-    - name: kubernetesパイソンライブラリインストール
+    # kubernetes : K8s API 호출용 Python 클라이언트
+    # PyYAML     : YAML 파싱용 (k8s 모듈이 매니페스트 파싱에 사용)
+    - name: kubernetes, PyYAML pip 설치
       pip:
         name:
           - kubernetes

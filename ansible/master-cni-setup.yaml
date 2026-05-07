@@ -1,8 +1,26 @@
-- name: KubernetesクラスタのCNIプラグインセットアップ
+# ─────────────────────────────────────────────────────────────────────────
+# 이 파일은 뭐 하는 파일?
+# ─────────────────────────────────────────────────────────────────────────
+# Calico CNI 플러그인 설치.
+#
+# CNI 가 뭔데? (Container Network Interface)
+#   - K8s 가 Pod 한테 IP 를 어떻게 줄지, 노드 간 Pod 통신은 어떻게 할지 결정하는 플러그인.
+#   - kubeadm init 직후엔 노드 상태가 'NotReady' (CNI 가 없어서). CNI 깔아야 'Ready' 됨.
+#
+# 왜 Calico?
+#   - 가장 널리 쓰이는 옵션. NetworkPolicy 지원 풍부.
+#   - 기본 모드는 IP-in-IP 캡슐화 → vpc.tf 의 SG 자기참조 규칙(protocol=-1)이 이걸 통과시킴.
+#
+# 어디에 적용?
+#   main-master 한 대에서만. 'kubectl apply' 는 클러스터 전체에 적용되는 명령이라 한 번이면 충분.
+# ─────────────────────────────────────────────────────────────────────────
+
+- name: K8s CNI 플러그인 설치 (Calico)
   hosts: main-master
   become: true
   tasks:
-    - name: Calicoネットワークプラグインの適用
+    # become: false → root 가 아닌 ec2-user 로 실행 (~/.kube/config 가 ec2-user 소유)
+    - name: Calico v3.27.0 매니페스트 적용
       become: false
       ansible.builtin.shell: |
         kubectl apply -f https://raw.githubusercontent.com/projectcalico/calico/v3.27.0/manifests/calico.yaml

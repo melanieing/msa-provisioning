@@ -1,23 +1,51 @@
-- name: ArgoCD セットアップ
+# ─────────────────────────────────────────────────────────────────────────
+# 이 파일은 뭐 하는 파일?
+# ─────────────────────────────────────────────────────────────────────────
+# Argo CD 설치 + root Application 생성. 메인.yaml 의 마지막 단계.
+#
+# Argo CD 가 뭐였더라?
+#   GitOps 도구. Git 레포의 매니페스트를 클러스터에 자동 동기화 (sync).
+#   설치되면 클러스터 안에 Argo CD 본체가 떠있고, 우리가 만든 root Application 한 개를
+#   생성하는 게 이 파일의 핵심.
+#
+# 이 파일이 끝난 후 클러스터의 모든 변경은 GitOps 로:
+#   1. 우리가 msa-argocd-manifest 에 push
+#   2. Argo CD 가 자동 감지
+#   3. 클러스터에 자동 배포
+#   다시는 수동으로 'kubectl apply' 안 함. 이게 PDF 5.5절의 "single source of truth" 원칙.
+#
+# 마지막 task 의 root Application 이 핵심:
+#   melanieing/msa-argocd-manifest 의 'bootstrap/' 폴더를 watch.
+#   그 안의 projects-app, platform-of-apps, apps-appset 가 줄줄이 활성화됨.
+# ─────────────────────────────────────────────────────────────────────────
+
+- name: Argo CD 설치
   hosts: main-master
-  become: false
+  become: false                                    # ec2-user 의 ~/.kube/config 사용
   tasks:
-    - name: ArgoCD用のNamespace作成
+
+    # ─── 1. argocd 네임스페이스 생성 ──────────────────────────────
+    # Argo CD 본체가 살 곳. 이 네임스페이스에 controller, server 같은 Pod 들이 뜸.
+    - name: argocd 네임스페이스 생성
       kubernetes.core.k8s:
         name: "argocd"
         kind: Namespace
         state: present
         kubeconfig: /home/ec2-user/.kube/config
 
-    - name: ArgoCD Helm レポジトリ追加
+    # ─── 2. Argo CD Helm 저장소 추가 ──────────────────────────────
+    - name: Argo CD Helm 저장소 추가
       kubernetes.core.helm_repository:
         name: argo
         repo_url: "https://argoproj.github.io/argo-helm"
 
-    - name: Helm レポジトリ更新
+    - name: Helm 저장소 인덱스 갱신
       command: helm repo update
 
-    - name: LBCのWebhook設定削除
+    # ─── 3. LBC 의 Webhook 정리 ────────────────────────────────────
+    # AWS LBC 가 만든 webhook 설정이 가끔 Argo CD 설치를 방해함 → 미리 제거.
+    # ignore_errors: yes — 없어도 OK (없으면 그냥 패스).
+    - name: AWS LBC 의 webhook 충돌 방지용 정리
       shell: |
         kubectl delete mutatingwebhookconfigurations mservice.elbv2.k8s.aws --ignore-not-found
         kubectl delete validatingwebhookconfigurations vservice.elbv2.k8s.aws --ignore-not-found
@@ -25,13 +53,16 @@
         KUBECONFIG: /home/ec2-user/.kube/config
       ignore_errors: yes
 
-    - name: ArgoCD インストール
+    # ─── 4. Argo CD 본체 Helm 차트 설치 ───────────────────────────
+    # NodePort 30080 으로 Argo CD UI 노출 → 'http://b-master-01:30080' 으로 접속 가능.
+    # --insecure : Argo CD UI 가 자체 TLS 안 쓰고 평문 HTTP 로 동작 (학습용 간소화).
+    - name: Argo CD Helm 차트 설치
       kubernetes.core.helm:
         name: argocd
         chart_ref: argo/argo-cd
         release_namespace: "argocd"
         create_namespace: true
-        wait: true
+        wait: true                                 # Argo CD Pod 들이 다 뜰 때까지 기다림
         values:
           server:
             service:
@@ -41,7 +72,10 @@
             extraArgs:
               - --insecure
 
-    - name: CRDの存在確認
+    # ─── 5. CRD 등록 확인 (Application CRD 가 떠야 다음 task 가능) ─
+    # Helm 설치는 Pod 띄우는 것까지인데, CRD(Application 같은 새 리소스 종류) 가 등록되는 데
+    # 시간이 좀 걸림. 등록 확인까지 최대 50초 기다림 (10회 × 5초 retry).
+    - name: applications.argoproj.io CRD 등록 대기
       kubernetes.core.k8s_info:
         kind: CustomResourceDefinition
         name: applications.argoproj.io
@@ -50,7 +84,11 @@
       retries: 10
       delay: 5
 
-    - name: ArgoCD root Applicationの作成
+    # ─── 6. root Application 생성 (GitOps 시작!) ──────────────────
+    # 이 한 개의 Application 이 우리 매니페스트 레포의 'bootstrap/' 폴더를 watch.
+    # 그 안의 projects-app(-100) → platform-of-apps(-50) → apps-appset(0) 순서로 줄줄이 sync.
+    # 즉 이 task 끝나면 GitOps 자동화가 본격 시작됨.
+    - name: Argo CD root Application 생성 (App-of-Apps 진입점)
       kubernetes.core.k8s:
         state: present
         definition:
@@ -60,13 +98,14 @@
             name: root-app
             namespace: argocd
             finalizers:
+              # 이 Application 지우면 자식 리소스도 같이 지워줌 (안전장치)
               - resources-finalizer.argocd.argoproj.io
           spec:
-            project: default
+            project: default                       # 아직 우리 AppProject 가 없으니 기본 프로젝트
             source:
               repoURL: https://github.com/melanieing/msa-argocd-manifest.git
               targetRevision: HEAD
-              path: bootstrap
+              path: bootstrap                      # ← 우리 매니페스트 레포의 진입점 폴더
             destination:
               server: https://kubernetes.default.svc
               namespace: argocd

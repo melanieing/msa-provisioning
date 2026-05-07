@@ -1,26 +1,46 @@
-- name: Traefik Ingress Controllerインストール
+# ─────────────────────────────────────────────────────────────────────────
+# 이 파일은 뭐 하는 파일?
+# ─────────────────────────────────────────────────────────────────────────
+# Traefik (Ingress Controller) 설치.
+#
+# ⚠️ 현재 사용 안 함 (고아 파일):
+#   main.yaml 에서 import 안 됨 → 'ansible-playbook main.yaml' 실행 시 호출 X.
+#   직접 'ansible-playbook traefik-setup.yaml' 로만 실행됨.
+#
+# Traefik 이 뭔데?
+#   K8s 의 Ingress 트래픽을 처리하는 reverse proxy.
+#   원래는 외부 → ALB → Pod 흐름에서 Traefik 이 가운데서 라우팅 담당.
+#
+# 정리 메모:
+#   현재 우리 architecture 는 AWS LBC 가 ALB/NLB 를 직접 관리하므로 Traefik 불필요.
+#   향후 Phase B 에서 결정: 삭제 vs 통합. 지금은 그냥 두기.
+# ─────────────────────────────────────────────────────────────────────────
+
+- name: Traefik Ingress Controller 설치 (현재 미사용)
   hosts: main-master
   become: yes
   vars:
     traefik_namespace: "traefik"
 
   tasks:
-    - name: Traefik用のNamespace作成
+
+    - name: traefik 네임스페이스 생성
       kubernetes.core.k8s:
         name: "{{ traefik_namespace }}"
         kind: Namespace
         state: present
         kubeconfig: /home/ec2-user/.kube/config
 
-    - name: Traefik Helm レポジトリ追加
+    - name: Traefik Helm 저장소 추가
       kubernetes.core.helm_repository:
         name: traefik
         repo_url: "https://traefik.github.io/charts"
 
-    - name: Helm レポジトリ更新
+    - name: Helm 저장소 인덱스 갱신
       command: helm repo update
 
-    - name: LBCのWebhook設定削除
+    # AWS LBC 의 webhook 설정이 Traefik 설치를 방해할 수 있어서 사전 정리.
+    - name: AWS LBC 의 webhook 충돌 방지용 정리
       shell: |
         kubectl delete mutatingwebhookconfigurations mservice.elbv2.k8s.aws --ignore-not-found
         kubectl delete validatingwebhookconfigurations vservice.elbv2.k8s.aws --ignore-not-found
@@ -28,7 +48,8 @@
         KUBECONFIG: /home/ec2-user/.kube/config
       ignore_errors: yes
 
-    - name: Traefik Ingress Controllerインストール
+    # Traefik 본체 설치. service annotation 으로 외부 NLB 를 instance 모드로 자동 생성.
+    - name: Traefik Helm 차트 설치
       kubernetes.core.helm:
         name: traefik
         chart_ref: traefik/traefik
@@ -37,9 +58,10 @@
         values:
           service:
             annotations:
+              # AWS LBC 가 이 annotation 들을 보고 NLB 를 자동 생성:
               service.beta.kubernetes.io/aws-load-balancer-type: "external"
               service.beta.kubernetes.io/aws-load-balancer-nlb-target-type: "instance"
               service.beta.kubernetes.io/aws-load-balancer-scheme: "internet-facing"
           ingressClass:
             enabled: true
-            isDefaultClass: true
+            isDefaultClass: true                   # 모든 Ingress 가 별도 지정 없으면 Traefik 사용

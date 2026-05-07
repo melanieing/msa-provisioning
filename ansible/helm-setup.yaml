@@ -1,24 +1,46 @@
-- name: Helmのセットアップ
+# ─────────────────────────────────────────────────────────────────────────
+# 이 파일은 뭐 하는 파일?
+# ─────────────────────────────────────────────────────────────────────────
+# main-master 에 Helm CLI 설치.
+#
+# Helm 이 뭔데?
+#   - K8s 의 패키지 매니저. (npm, apt 같은 개념)
+#   - 'helm install argocd argo/argo-cd' 한 줄로 복잡한 K8s 매니페스트 묶음을 한 번에 배포.
+#   - 다음 단계의 nlb-setup, argocd-setup 이 Helm 으로 컴포넌트 설치하므로 필수 사전 도구.
+#
+# 설치 방법:
+#   공식 GitHub Release 에서 tarball 다운로드 → 압축 풀고 → /usr/local/bin/helm 으로 복사.
+#   v3.14.0 사용 (안정 버전).
+# ─────────────────────────────────────────────────────────────────────────
+
+- name: Helm 설치
   hosts: main-master
   become: true
   vars:
-    helm_version: "v3.14.0"
-    arch: "amd64"
+    helm_version: "v3.14.0"                        # 사용할 Helm 버전
+    arch: "amd64"                                  # CPU 아키텍처 (EC2 t3 = x86_64 = amd64)
 
   tasks:
-    - name: Helmのインストール
+
+    # ─── 1. tarball 다운로드 + 압축 풀기 ──────────────────────────
+    # unarchive: URL 에서 받아서 자동으로 풀어줌 (편리한 모듈).
+    - name: Helm tarball 다운로드 + 압축 해제 (/tmp 에)
       unarchive:
         src: "https://get.helm.sh/helm-{{ helm_version }}-linux-{{ arch }}.tar.gz"
         dest: /tmp
-        remote_src: true
+        remote_src: true                           # URL 다운로드도 'remote_src' 로 표시 필요
 
-    - name: Helmバイナリを/usr/local/binにコピー
+    # ─── 2. helm 바이너리를 PATH 에 두기 ──────────────────────────
+    # /usr/local/bin 은 모든 사용자가 PATH 로 인식하는 표준 위치.
+    - name: helm 바이너리를 /usr/local/bin/helm 으로 복사
       copy:
         src: "/tmp/linux-{{ arch }}/helm"
         dest: /usr/local/bin/helm
-        mode: "0755"
-        remote_src: true
+        mode: "0755"                               # 실행 권한 부여
+        remote_src: true                           # 원격 노드에서 원격 노드로 복사
 
-    - name: Helmのインストール確認
+    # ─── 3. 설치 확인 ──────────────────────────────────────────────
+    # 'helm version' 호출해서 정상 출력되는지 확인. register 에 결과 저장 (로그 확인용).
+    - name: helm version 으로 설치 확인
       command: helm version
       register: helm_result
