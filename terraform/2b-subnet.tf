@@ -2,6 +2,9 @@ resource "aws_subnet" "public-ap-northeast-2b" {
   vpc_id            = aws_vpc.kt-cloud-vpc.id
   cidr_block        = "10.0.3.0/24"
   availability_zone = "ap-northeast-2b"
+  tags = {
+    "kubernetes.io/role/elb" = "1"
+  }
 }
 
 resource "aws_route_table_association" "public-2b-assoc" {
@@ -13,6 +16,9 @@ resource "aws_subnet" "private-ap-northeast-2b" {
   vpc_id            = aws_vpc.kt-cloud-vpc.id
   cidr_block        = "10.0.4.0/24"
   availability_zone = "ap-northeast-2b"
+  tags = {
+    "kubernetes.io/role/internal-elb" = "1"
+  }
 }
 
 resource "aws_route_table" "private-ap-northeast-2b-rt" {

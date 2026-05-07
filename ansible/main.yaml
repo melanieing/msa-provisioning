@@ -13,4 +13,4 @@
 
 - import_playbook: nlb-setup.yaml
 
-- import_playbook: traefik-setup.yaml
+- import_playbook: argocd-setup.yaml

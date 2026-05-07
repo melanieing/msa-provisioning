@@ -101,7 +101,7 @@
 
 ### NLB을 클러스터에 등록하기 위한 IAM 롤
 - EKS가 아니라、EC2에서 구축한 클러스터는 NLB를 등록하기 위해 노드에 이하의 IAM정책이 필요하다
-https://raw.githubusercontent.com/kubernetes-sigs/aws-load-balancer-controller/v2.7.2/docs/install/iam_policy.json
+https://github.com/kubernetes-sigs/aws-load-balancer-controller/blob/main/docs/install/iam_policy.json
 - 「ktcloud-cluster-node-role」의IAM Role에 아까 IAM정책을 붙여서 준비하자
 
 ### Terrafrom
@@ -123,7 +123,7 @@ output "ap-northeast-2b-bastion-node-connect-command" {
 ```
 
 ### Ansible
-- inventory.iniがterraform의.tftpl에서 작성되어
+- inventory.ini가terraform의.tftpl에서 작성되어
 - ping이 도달하는지 확인하다.
 ```terminal
 ➜  ansible git:(master) ansible all -m ping -i inventory.ini
