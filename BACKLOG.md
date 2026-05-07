@@ -24,6 +24,7 @@
 
 ### 🚨 위험 / 차단 요소
 
+- ✅ **2026-05-08 발견**: 첫 destroy 시 ECR repo 가 이미지 있어서 `RepositoryNotEmptyException` 으로 막힘. **fix 적용 완료** — `modules/registry/main.tf` 에 `force_delete = true` 추가 (코드는 다음 apply 시 state 반영). 이번 destroy 는 `aws ecr delete-repository --force` 수동 처리 후 완료.
 - 아직 한 번도 클러스터를 띄워본 적 없음 → **첫 부트스트랩 시 발견될 이슈** 시간 잡아먹을 가능성
 - ✅ **2026-05-08 발견**: 사용자 첫 `terraform plan` 시 사전 준비 누락 발견 → SSH 키 + IAM Role 수동 생성 가이드 안내. 후속: IAM Role 도 Terraform 자동화 (아래 추가)
 - Helm 차트 버전들이 cutoff 이후이긴 하나 실제 클러스터에서 깨질 가능성
@@ -33,6 +34,7 @@
 ## ✅ 완료 (역순, 최근 → 옛날)
 
 ### 2026-05-08
+- ✅ **🐛 ECR force_delete fix** — 첫 destroy 시 발견된 `RepositoryNotEmptyException` 의 영구 해결책. `modules/registry/main.tf` 에 `force_delete = true` 추가. 다음 destroy 부터 이미지 자동 정리.
 - ✅ **B-2d/e/f 3개 backend 서비스 Helm 차트 + B-2c 리팩터** — product-service / order-service / inventory-service 차트 작성. ports list 패턴 도입으로 4개 차트가 동일 templates (deployment/service/configmap/serviceaccount/_helpers) 공유. backend 들은 듀얼 포트(HTTP + gRPC), gateway 는 단일. 각각 PG/Kafka/Redis 연결 env. 4개 차트 helm lint 모두 통과.
 - ✅ **B-2c user-api-gateway Helm 차트 작성** — Chart.yaml + values.yaml + 5 templates (deployment, service, configmap, serviceaccount, _helpers.tpl). non-root securityContext + actuator liveness/readiness probes + ECR image. helm lint + template render 통과.
 - ✅ **Phase B ID 체계 통일** — B1~B8 → B-1a~g, B6a~e → B-2c~g (sub-phase 일관성).

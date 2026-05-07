@@ -33,6 +33,10 @@ resource "aws_ecr_repository" "this" {
   name                 = each.key
   image_tag_mutability = "MUTABLE" # latest 태그를 새 이미지로 갱신 가능
 
+  # destroy 시 이미지 있어도 함께 삭제 (학습 환경 — 매일 destroy/bootstrap 워크플로 친화).
+  # 운영 환경이라면 false 로 두고 별도 라이프사이클 정책으로 정리하는 게 안전.
+  force_delete = true
+
   # push 시 자동 취약점 스캔 (Trivy 같은 외부 도구 없이도 기본 스캔)
   image_scanning_configuration {
     scan_on_push = true
