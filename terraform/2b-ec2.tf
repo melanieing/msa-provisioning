@@ -6,6 +6,11 @@ resource "aws_instance" "ap-northeast-2b-master-node-01" {
   key_name             = aws_key_pair.bastion-node-key.key_name
   iam_instance_profile = aws_iam_instance_profile.ktcloud-cluster-node-profile.name
   source_dest_check    = false
+
+  user_data = <<-EOF
+              #!/bin/bash
+              hostnamectl set-hostname b-master-01
+              EOF
 }
 
 resource "aws_instance" "ap-northeast-2b-worker-node-01" {

@@ -8,22 +8,25 @@
         state: started
         enabled: true
 
-    - name: kubeadm init成功チェック経路変更
-      lineinfile:
-        path: /etc/hosts
-        line: "127.0.0.1 {{ nlb_dns_name }}"
+    - name: Kubernetesの設定ディレクトリを作成
+      ansible.builtin.file:
+        path: /etc/kubernetes
+        state: directory
+        mode: "0755"
+      become: true
+
+    - name: kubeadmの設定ファイルをテンプレートから生成
+      ansible.builtin.template:
+        src: ./configuration/kubeadm-config.yaml.j2
+        dest: /etc/kubernetes/kubeadm-config.yaml
+        mode: "0644"
 
     - name: kubeadm initコマンドの実行
       ansible.builtin.shell: |
-        kubeadm init \
-          --control-plane-endpoint "{{ control_plane_endpoint }}" \
-          --upload-certs \
-          --cri-socket unix:///var/run/containerd/containerd.sock \
-          --pod-network-cidr=192.168.0.0/16
+        kubeadm init --config /etc/kubernetes/kubeadm-config.yaml --upload-certs
       register: init_output
       args:
         creates: /etc/kubernetes/admin.conf
-      ignore_errors: true
 
     - name: kubectlのためのkubeconfig設定
       ansible.builtin.file:

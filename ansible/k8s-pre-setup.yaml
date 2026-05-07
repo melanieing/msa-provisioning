@@ -19,3 +19,12 @@
         name: net.bridge.bridge-nf-call-iptables
         value: "1"
         state: present
+
+    - name: /etc/hostsファイルにマスターノードのエントリを追加
+      lineinfile:
+        path: /etc/hosts
+        line: "{{ item.ip }} {{ item.name }}"
+      loop:
+        - { ip: "{{ a_master_01_private_ip }}", name: "a-master-01" }
+        - { ip: "{{ a_master_02_private_ip }}", name: "a-master-02" }
+        - { ip: "{{ b_master_01_private_ip }}", name: "b-master-01" }

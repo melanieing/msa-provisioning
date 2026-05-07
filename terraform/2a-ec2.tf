@@ -6,6 +6,11 @@ resource "aws_instance" "ap-northeast-2a-master-node-01" {
   key_name             = aws_key_pair.bastion-node-key.key_name
   iam_instance_profile = aws_iam_instance_profile.ktcloud-cluster-node-profile.name
   source_dest_check    = false
+
+  user_data = <<-EOF
+              #!/bin/bash
+              hostnamectl set-hostname a-master-01
+              EOF
 }
 
 resource "aws_instance" "ap-northeast-2a-master-node-02" {
@@ -16,6 +21,11 @@ resource "aws_instance" "ap-northeast-2a-master-node-02" {
   key_name             = aws_key_pair.bastion-node-key.key_name
   iam_instance_profile = aws_iam_instance_profile.ktcloud-cluster-node-profile.name
   source_dest_check    = false
+
+  user_data = <<-EOF
+              #!/bin/bash
+              hostnamectl set-hostname a-master-02
+              EOF
 }
 
 resource "aws_instance" "ap-northeast-2a-worker-node-01" {

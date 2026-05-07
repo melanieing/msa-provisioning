@@ -1,13 +1,6 @@
 - name: ArgoCD セットアップ
   hosts: main-master
   become: false
-  vars:
-    argocd_namespace: "argocd"
-    app_name: "ktcloud-msa-project"
-    repo_url: "https://github.com/kanei0415/ktcloud-k8s-argocd-manifest.git"
-    target_path: "Setup"
-    target_revision: "main"
-
   tasks:
     - name: ArgoCD用のNamespace作成
       kubernetes.core.k8s:
@@ -57,21 +50,21 @@
       retries: 10
       delay: 5
 
-    - name: ArgoCD Applicationの作成
+    - name: ArgoCD root Applicationの作成
       kubernetes.core.k8s:
         state: present
         definition:
           apiVersion: argoproj.io/v1alpha1
           kind: Application
           metadata:
-            name: "{{ app_name }}"
-            namespace: "{{ argocd_namespace }}"
+            name: root-app
+            namespace: argocd
           spec:
             project: default
             source:
-              repoURL: "{{ repo_url }}"
-              targetRevision: "{{ target_revision }}"
-              path: "{{ target_path }}"
+              repoURL: https://github.com/kanei0415/ktcloud-k8s-argocd-manifest.git
+              targetRevision: HEAD
+              path: Setup
             destination:
               server: https://kubernetes.default.svc
               namespace: default
