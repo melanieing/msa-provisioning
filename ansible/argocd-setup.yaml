@@ -4,7 +4,7 @@
   tasks:
     - name: ArgoCD用のNamespace作成
       kubernetes.core.k8s:
-        name: "{{ argocd_namespace }}"
+        name: "argocd"
         kind: Namespace
         state: present
         kubeconfig: /home/ec2-user/.kube/config
@@ -29,7 +29,7 @@
       kubernetes.core.helm:
         name: argocd
         chart_ref: argo/argo-cd
-        release_namespace: "{{ argocd_namespace }}"
+        release_namespace: "argocd"
         create_namespace: true
         wait: true
         values:

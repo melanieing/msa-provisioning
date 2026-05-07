@@ -129,6 +129,15 @@ resource "aws_security_group" "cluster-node-sg" {
   }
 }
 
+resource "aws_security_group_rule" "cluster_node_self_ingress" {
+  type                     = "ingress"
+  from_port                = 0
+  to_port                  = 0
+  protocol                 = "-1"
+  security_group_id        = aws_security_group.cluster-node-sg.id
+  source_security_group_id = aws_security_group.cluster-node-sg.id
+}
+
 data "http" "my_ip" {
   url = "https://ifconfig.me/ip"
 }
