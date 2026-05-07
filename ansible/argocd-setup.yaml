@@ -59,18 +59,21 @@
           metadata:
             name: root-app
             namespace: argocd
+            finalizers:
+              - resources-finalizer.argocd.argoproj.io
           spec:
             project: default
             source:
-              repoURL: https://github.com/kanei0415/ktcloud-k8s-argocd-manifest.git
+              repoURL: https://github.com/melanieing/msa-argocd-manifest.git
               targetRevision: HEAD
-              path: Setup
+              path: bootstrap
             destination:
               server: https://kubernetes.default.svc
-              namespace: default
+              namespace: argocd
             syncPolicy:
               automated:
                 prune: true
                 selfHeal: true
               syncOptions:
                 - CreateNamespace=true
+                - ServerSideApply=true
