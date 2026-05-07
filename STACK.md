@@ -148,7 +148,8 @@
 | **Base image** | `eclipse-temurin:21-jdk` (build) + `21-jre` (runtime) | ✅ 적용 |
 | **Container Registry** | **AWS ECR** (Private + KMS 암호화 + lifecycle) | ✅ Terraform 코드 (2026-05-08) — apply 필요 |
 | **GitHub Actions ↔ AWS** | **OIDC 페더레이션** (장기 access key 미사용) | ✅ Terraform 코드 (2026-05-08) — apply 필요 |
-| **GitHub Actions** workflow | 서비스별 빌드 + ECR push + 매니페스트 tag bump | ⏳ 다음 |
+| **GitHub Actions** workflow | matrix 전략 (4 서비스 병렬) + OIDC + buildx GHA cache | ✅ 적용 (2026-05-08) — `.github/workflows/build-and-push.yml` |
+| **매니페스트 image tag bump** | 자동화 (Argo CD Image Updater 또는 workflow 의 git push) | ⏳ 후속 |
 | **ECR scan on push** | AWS 기본 취약점 스캔 | ✅ 적용 (scan_on_push=true) |
 | **Trivy 보안 스캔** | latest action | ⏳ 미구현 (ECR scan 으로 대체 가능) |
 
@@ -226,6 +227,7 @@
 
 | 일자 | 변경 |
 |---|---|
+| 2026-05-08 | D1-d: GitHub Actions workflow (matrix + OIDC + ECR push + GHA layer cache). D1-a/b/c Terraform 모듈 (ECR + KMS + OIDC). |
 | 2026-05-08 | B-2b 4개 서비스 Dockerfile 추가 (멀티스테이지 + Spring Boot layered jar + non-root + healthcheck) |
 | 2026-05-08 | Spring Boot 3.3.0 → 3.5.14 업그레이드. Cloud Gateway 4.1.9 → 4.3.0. Gradle wrapper(8.14.4) 누락 fix |
 | 2026-05-08 | tech stack 전체 → 2026-05 기준 최신 안정 버전으로 정합성 맞춤 (Strimzi 0.45→1.0, K8s 1.30→1.35, Calico 3.27→3.32, Helm 3.14→3.20.2, kube-prometheus-stack 65→84.5, Loki 6.10→7.0, OTel 0.110→0.153, Kafka 3.8→4.2, Redis 7.0→7.4.8) |

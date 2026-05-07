@@ -11,15 +11,15 @@
 |---|---|
 | **마감일** | 2026-05-20 |
 | **남은 일수** | 12일 |
-| **현재 위치** | 🎉 **첫 terraform apply 성공** (2026-05-08). D-1 진행 중 (GitHub Actions workflow 다음) |
-| **진행률** | Phase A 90%, Phase B 60%, Phase C 0%, Phase D 30% |
+| **현재 위치** | 🎉 D-1 첫 ECR push 성공 (2026-05-08). 다음: B-2c Helm 차트 5개 |
+| **진행률** | Phase A 90%, Phase B 60%, Phase C 0%, Phase D 50% |
 | **AWS 비용 사용량** | 부트스트랩 시작 (시간당 ~553 KRW. EC2 stop 시 ~180 KRW) |
 
 ### 다음 우선순위 (순서대로)
 
-1. **🎯 [D-1] GitHub Actions CI** (Dockerfile 검증 + 이미지 빌드 + push + 매니페스트 image tag bump)
-2. **🎯 [B-2c] 5개 서비스 Helm 차트** (`msa-spring-boot/charts/services/*`) — ApplicationSet 자동 등록
-3. **[클러스터 첫 부트스트랩]** 실제 실행 + 검증
+1. **🎯 [B-2c] 5개 서비스 Helm 차트** (`msa-spring-boot/charts/services/*`) — ApplicationSet 자동 등록 + ECR 이미지 참조
+2. **[클러스터 첫 부트스트랩]** `cluster-start.ps1` + ansible — K8s + Argo CD 띄우고 실제 deploy 검증
+3. **[D1-e]** 매니페스트 tag bump 자동화 (선택 — 또는 Argo CD Image Updater)
 4. **[Phase C]** 백엔드 보강 (JWT, Rate Limit, Resilience4j, Outbox Poller)
 
 ### 🚨 위험 / 차단 요소
@@ -33,6 +33,9 @@
 ## ✅ 완료 (역순, 최근 → 옛날)
 
 ### 2026-05-08
+- ✅ **🎉 D-1 첫 빌드 성공 — ECR 에 4개 이미지 push 완료** (4분 11초). registry: `601766312629.dkr.ecr.ap-northeast-2.amazonaws.com`. 각 서비스마다 `<git_sha> + latest` 두 태그.
+- ✅ **D1-d GitHub Actions workflow 작성** — `.github/workflows/build-and-push.yml`. 단일 yaml + **matrix 전략** (4개 서비스 병렬 빌드) + **OIDC 페더레이션** (GitHub Secrets 미사용) + `aws-actions/amazon-ecr-login` + `docker/build-push-action` (GHA layer cache, 2회차 빌드 단축). 두 태그 (`git sha` + `latest`) 동시 push.
+- ✅ **5개 PowerShell 스크립트 영어 메시지로 재작성** — 사용자 PowerShell 의 한글 인코딩 깨짐 fix. `[Console]::OutputEncoding = UTF8` 도 보강.
 - ✅ **🚀 첫 terraform apply 성공** — 63개 AWS 리소스 생성 완료. VPC + EC2 ×8 + NLB + EFS + EBS + ECR ×4 + KMS + GitHub OIDC + IAM Role. Outputs 정상 출력 (bastion IP, master IP 등). AWS 청구 시작.
 - ✅ **사용자 환경 사전 준비 완료** — SSH 키 (Git Bash/WSL→Windows 복사) + IAM Role (`ktcloud-cluster-node-role` AWS CLI 로 생성 + LBC 정책 attach).
 - ✅ **D1-a/b/c Terraform 인프라 추가 (ECR + OIDC + IAM)** — `modules/registry` (ECR ×4 + KMS 키 + lifecycle policy) + `modules/github-oidc` (OIDC provider + GitHub Actions assume role + ECR push policy with sub condition). compute 모듈의 노드 Role 에 `AmazonEC2ContainerRegistryReadOnly` attach. terraform validate 통과.
@@ -128,11 +131,12 @@
 
 | ID | 항목 | 상태 | 우선순위 |
 |---|---|---|---|
-| D1 | GitHub Actions CI (빌드 + 테스트 + 이미지 push + tag bump) | 🟡 **진행 중** (2026-05-08) | ECR + OIDC 채택 |
+| D1 | GitHub Actions CI (빌드 + 테스트 + 이미지 push + tag bump) | ✅ **핵심 완료** (2026-05-08) | 첫 push 성공: 4 services × `(git_sha + latest)` tags pushed to ECR in **4m 11s**. tag bump 만 후속 |
 | D1-a | Terraform: modules/registry (ECR ×4 + KMS + lifecycle) | ✅ 완료 (2026-05-08) | KMS 키 + scan_on_push + lifecycle (untagged 30, tagged 50) |
 | D1-b | Terraform: modules/github-oidc (OIDC provider + IAM Role) | ✅ 완료 (2026-05-08) | sub condition 으로 melanieing/msa-spring-boot 의 main + claude/* 만 허용 |
 | D1-c | EC2 노드 Role 에 ECR Pull 권한 attach | ✅ 완료 (2026-05-08) | AmazonEC2ContainerRegistryReadOnly 정책 attach |
-| D1-d | GitHub Actions workflow 4개 (서비스마다) | 🟡 진행 중 | 다음 작업 |
+| D1-d | GitHub Actions workflow (matrix 전략, 4개 서비스) | ✅ **완료** (2026-05-08) | 단일 yaml + matrix + OIDC + ECR push + GHA layer cache |
+| D1-e | 매니페스트 리포 image tag 자동 bump | ⏳ 후속 | 첫 push 검증 후 진행 |
 | D2 | OpenTelemetry SDK 5개 서비스 통합 | ⏳ | Must |
 | D3 | Prometheus + Loki + Grafana values 채움 | ⏳ | Must |
 | D4 | Grafana 대시보드 1~2개 (latency, Kafka lag) | ⏳ | Must |
@@ -192,6 +196,7 @@ Day 13  (5/20)     : 발표
 
 | 일자 | 변경 |
 |---|---|
+| 2026-05-08 | D1-d GitHub Actions workflow 추가 (matrix + OIDC + ECR push). PowerShell 스크립트 영어로 재작성. 첫 terraform apply 성공. |
 | 2026-05-08 | D1-a/b/c Terraform: ECR ×4 + KMS + lifecycle + GitHub OIDC provider + assume role + 노드 ECR Pull 권한. |
 | 2026-05-08 | B-2b 4개 서비스 Dockerfile + .dockerignore. 멀티스테이지 + Spring Boot layered jar + non-root + healthcheck 패턴. |
 | 2026-05-08 | A9 Spring Boot 3.3.0 → 3.5.14 업그레이드 완료. Gradle wrapper 누락 fix 포함. |
