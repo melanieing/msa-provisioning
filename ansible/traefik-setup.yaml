@@ -1,13 +1,11 @@
 # ─────────────────────────────────────────────────────────────────────────
-# 이 파일은 뭐 하는 파일?
-# ─────────────────────────────────────────────────────────────────────────
 # Traefik (Ingress Controller) 설치.
 #
 # ⚠️ 현재 사용 안 함 (고아 파일):
 #   main.yaml 에서 import 안 됨 → 'ansible-playbook main.yaml' 실행 시 호출 X.
 #   직접 'ansible-playbook traefik-setup.yaml' 로만 실행됨.
 #
-# Traefik 이 뭔데?
+# Traefik?
 #   K8s 의 Ingress 트래픽을 처리하는 reverse proxy.
 #   원래는 외부 → ALB → Pod 흐름에서 Traefik 이 가운데서 라우팅 담당.
 #

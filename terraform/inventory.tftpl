@@ -1,5 +1,5 @@
 # ─────────────────────────────────────────────────────────────────────────
-# 이 파일은 Ansible 의 inventory.ini 를 만드는 "템플릿" 이야.
+# 이 파일은 Ansible 의 inventory.ini 를 만드는 "템플릿".
 # Terraform 의 templatefile() 함수가 dollar-brace 자리에 실제 IP 값을 채워서 출력함.
 # 결과는 ../ansible/inventory.ini 로 저장됨.
 # ─────────────────────────────────────────────────────────────────────────
@@ -27,16 +27,16 @@ ${ap-northeast-2b-worker-node-02}
 # ProxyCommand: SSH 가 대상에 직접 접속 못할 때 중간 호스트를 거치는 명령어.
 
 [ap-northeast-2a-masters:vars]
-ansible_ssh_common_args='-o ProxyCommand="ssh -W %h:%p -q ec2-user@${bastion_a_ip} -i ${ssh_private_key_path}"'
+ansible_ssh_common_args='-o ProxyCommand="ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -W %h:%p -q ec2-user@${bastion_a_ip} -i ${ssh_private_key_path}"'
 
 [ap-northeast-2a-workers:vars]
-ansible_ssh_common_args='-o ProxyCommand="ssh -W %h:%p -q ec2-user@${bastion_a_ip} -i ${ssh_private_key_path}"'
+ansible_ssh_common_args='-o ProxyCommand="ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -W %h:%p -q ec2-user@${bastion_a_ip} -i ${ssh_private_key_path}"'
 
 [main-master:vars]
-ansible_ssh_common_args='-o ProxyCommand="ssh -W %h:%p -q ec2-user@${bastion_b_ip} -i ${ssh_private_key_path}"'
+ansible_ssh_common_args='-o ProxyCommand="ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -W %h:%p -q ec2-user@${bastion_b_ip} -i ${ssh_private_key_path}"'
 
 [ap-northeast-2b-workers:vars]
-ansible_ssh_common_args='-o ProxyCommand="ssh -W %h:%p -q ec2-user@${bastion_b_ip} -i ${ssh_private_key_path}"'
+ansible_ssh_common_args='-o ProxyCommand="ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -W %h:%p -q ec2-user@${bastion_b_ip} -i ${ssh_private_key_path}"'
 
 
 # ─── 모든 호스트 공통 설정 ───────────────────────────────────────

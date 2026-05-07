@@ -31,3 +31,29 @@ output "ap-northeast-2b-bastion-node-connect-command" {
 output "main-master-node-connect-command" {
   value = "ssh -A -J ec2-user@${aws_instance.ap-northeast-2b-bastion-node.public_ip} ec2-user@${aws_instance.ap-northeast-2b-master-node-01.private_ip}"
 }
+
+
+# ─────────────────────────────────────────────────────────────────────────
+# 비용 절감 스크립트(scripts/cluster-stop.ps1 등) 가 사용할 EC2 ID 목록.
+# 'terraform output -raw cluster_instance_ids' 로 공백 구분된 ID 들이 출력됨.
+# ─────────────────────────────────────────────────────────────────────────
+output "cluster_instance_ids" {
+  description = "All EC2 instance IDs in the cluster (masters + workers + bastions). Used by cost-saving stop/start scripts."
+  value = join(" ", [
+    aws_instance.ap-northeast-2a-master-node-01.id,
+    aws_instance.ap-northeast-2a-master-node-02.id,
+    aws_instance.ap-northeast-2b-master-node-01.id,
+    aws_instance.ap-northeast-2a-worker-node-01.id,
+    aws_instance.ap-northeast-2b-worker-node-01.id,
+    aws_instance.ap-northeast-2b-worker-node-02.id,
+    aws_instance.ap-northeast-2a-bastion-node.id,
+    aws_instance.ap-northeast-2b-bastion-node.id,
+  ])
+}
+
+
+# AWS region — 스크립트가 'aws ec2 stop-instances --region <X>' 호출 시 사용.
+output "aws_region" {
+  description = "AWS region where all instances live."
+  value       = var.region
+}
