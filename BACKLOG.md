@@ -26,8 +26,8 @@
    - Outbox Poller: `kubectl logs -n order-service deploy/order-service | grep outbox-poller` (5초 주기 polling) + Kafka 메시지 도달
    - notification: `kubectl logs -n notification-service deploy/notification-service` (📨 메시지 받음)
    - ArgoCD: notification-service 신규 Application 자동 등록 + 19+1 = **20 Synced/Healthy**
-2. **묶음 ② 관측성 (D2 + D3 풀스택 + D4)** — C1~C5 동작 후 metric/trace/log 가 의미 있어짐. 부수: P (metrics-server) + Q (Grafana svc) 같이.
-3. **묶음 ③ 운영 안정화 (A++b + O + R)** — destroy/bootstrap cycle 매끄러움. 묶음 ② 와 동시 가능.
+2. **🔴 묶음 ③ 우선순위 격상 — A++b + O + R + T**: destroy/bootstrap cycle 매끄러움. 매 cycle 마다 사용자가 GHA Re-run 해야 하는 마찰 + EBS/기타 orphan 검증 부담을 자동화. **이전 라운드보다 먼저** (cycle 효율 우선). 특히 **A++b**: OIDC + IAM + ECR 영구화로 cycle 마다 GHA push 자동 동작. 사용자 발견 (2026-05-12): "이 시점에 ECR/OIDC 없잖아" — 매 cycle 의 가장 큰 마찰.
+3. **묶음 ② 관측성 (D2 + D3 풀스택 + D4)** — C1~C5 동작 후 metric/trace/log 가 의미 있어짐. 부수: P (metrics-server) + Q (Grafana svc) 같이.
 4. **D8 Newman E2E** — Postman + Newman 시나리오 (C1~C5 활용한 E2E flow).
 5. **D7 정적 페이지** + **D12 발표 자료** — 마감 직전.
 
@@ -81,6 +81,7 @@
 | **Q** | Grafana service port-forward hang — `svc/kube-prometheus-stack-grafana 3000:80` 으로 port-forward 시 endpoint 못 찾음. svc selector 또는 port spec 검토. | Low |
 | **R** | build-and-push.yml paths 필터에 `**/application.yaml` 추가 — 단독 yaml 변경 시 build trigger 안 됨. 오늘 D11 commit 의 paths 매칭으로 우연히 해결됐지만 영구 fix 필요. | Low |
 | **S** | ✅ 완료 (2026-05-12) — cluster-teardown.ps1 의 orphan EBS cleanup. terraform destroy 가 EC2 만 죽여서 PVC 가 만든 dynamic EBS 가 cleanup 안 되던 문제. 사용자가 콘솔에서 옛 37 개 일괄 삭제 (~5,500원 손실). teardown.ps1 에 3 step (PVC 명시 삭제 + 60s wait → terraform destroy → safety net AWS CLI) 추가. 다음 destroy 부터 자동. |
+| **T** | teardown.ps1 의 safety net 을 EBS 외 5 카테고리로 확장 (BACKLOG 추가 2026-05-12, 사용자 발견). 현재는 매 destroy 후 사용자가 콘솔로 직접 검증해야 하는 부담. **사용자 말 그대로** "내가 못봤으면 어쩔뻔". 자동화 후보:<br>(a) EBS Snapshot status=completed → delete<br>(b) EIP AssociationId null → release<br>(c) ENI status=available → delete<br>(d) ALB/NLB 잔존 시 경고 (자동 삭제 X — 사용자 다른 프로젝트 LB 위험)<br>(e) VPC orphan 발견 시 escalation<br>위험도 고려해 (a)(b)(c) 만 자동, (d)(e) 는 경고. 묶음 ② 또는 묶음 ③ 와 함께. |
 
 ### ✅ 오늘 검증 완료 (어제 fix 의 결과)
 
