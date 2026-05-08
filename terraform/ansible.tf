@@ -16,7 +16,10 @@ resource "local_file" "ansible_inventory" {
     ap-northeast-2b-worker-node-02 = module.compute.worker_b02_private_ip
     ktcloud-nlb-ip                 = module.loadbalancer.nlb_dns_name
     vpc_id                         = module.network.vpc_id
-    ssh_private_key_path           = var.ssh_private_key_path
+    # ssh_key_name 만 전달. 템플릿이 '~/.ssh/${ssh_key_name}' 으로 path 자체 derive.
+    # ssh_private_key_path 변수는 의도적으로 제거 — Windows 절대경로 override 가능하면
+    # WSL ansible 의 ProxyCommand 가 키 못 찾는 함정 발생 (2026-05-09, 2026-05-10 두 번 발견).
+    ssh_key_name = var.ssh_key_name
   })
   filename = "${path.module}/../ansible/inventory.ini"
 }

@@ -30,6 +30,36 @@ Write-Host " Cluster bootstrap starting (~15-20 min total)" -ForegroundColor Cya
 Write-Host "============================================================" -ForegroundColor Cyan
 Write-Host ""
 
+# ─── Step 0/4: Pre-flight check ───────────────────────────────────
+# 2026-05-09 + 2026-05-10 두 번 같은 함정에 빠짐 — terraform.tfvars 의
+# ssh_*_key_path 가 Windows 절대경로 (C:/Users/.../) 면 terraform.exe 는 통과하지만
+# WSL ansible 의 ProxyCommand 가 키 못 찾아 'Connection closed by UNKNOWN port 65535'
+# 로 silently fail. ansible 단계 (~10분 후) 에서야 발견.
+# → 시작 전에 즉시 차단. terraform 변수 default(~/.ssh/...) 가 양쪽 호환.
+$TfvarsPath = Join-Path $TerraformDir "terraform.tfvars"
+if (Test-Path $TfvarsPath) {
+    $badPaths = Get-Content $TfvarsPath -ErrorAction SilentlyContinue |
+                Where-Object { $_ -match '^\s*ssh_(private|public)_key_path\s*=\s*"[A-Za-z]:[/\\]' }
+    if ($badPaths) {
+        Write-Host ""
+        Write-Host "============================================================" -ForegroundColor Red
+        Write-Host " FATAL: terraform.tfvars 에 Windows 절대경로 ssh_*_key_path" -ForegroundColor Red
+        Write-Host "============================================================" -ForegroundColor Red
+        $badPaths | ForEach-Object { Write-Host "  $_" -ForegroundColor Red }
+        Write-Host ""
+        Write-Host "Windows 절대경로 (C:/Users/...) 는 terraform.exe 는 통과하지만" -ForegroundColor Yellow
+        Write-Host "WSL ansible 이 키 못 찾아서 ~10분 후 ansible 단계에서 fail." -ForegroundColor Yellow
+        Write-Host ""
+        Write-Host "[Fix] 해당 라인 제거 → default '~/.ssh/<ssh_key_name>' 사용" -ForegroundColor Green
+        Write-Host "      (~ 는 Windows + WSL 양쪽 모두 안전하게 확장됨)" -ForegroundColor Green
+        Write-Host "      ssh_private_key_path 변수는 제거됨 — ssh_key_name 으로 자동 derive." -ForegroundColor Green
+        Write-Host ""
+        throw "Aborted. Fix terraform.tfvars and re-run."
+    }
+    Write-Host "[0/4] Pre-flight: terraform.tfvars OK (no Windows abs path)." -ForegroundColor Green
+}
+Write-Host ""
+
 # ─── Step 1/4: Terraform init + apply ─────────────────────────────
 Write-Host "[1/4] terraform apply (creating AWS infra, ~5 min)..." -ForegroundColor Cyan
 Push-Location $TerraformDir

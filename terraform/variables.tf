@@ -158,13 +158,13 @@ variable "ssh_key_name" {
 }
 
 variable "ssh_public_key_path" {
-  description = "AWS 에 업로드할 공개키 파일 경로. ssh-key-gen.bash 가 이 위치에 키 만들어둠."
+  description = "AWS 에 업로드할 공개키 파일 경로. ssh-key-gen.bash 가 이 위치에 키 만들어둠. file() 호출 시 pathexpand() 로 ~ 자동 확장 (compute 모듈)."
   type        = string
   default     = "~/.ssh/ktcloud-bastion-node-key.pub"
 }
 
-variable "ssh_private_key_path" {
-  description = "내 컴퓨터의 SSH 개인키 위치. AWS 에 업로드 X — 단지 inventory.ini, output 에 SSH 명령어 쓸 때만 사용."
-  type        = string
-  default     = "~/.ssh/ktcloud-bastion-node-key"
-}
+# NOTE: ssh_private_key_path 변수는 의도적으로 제거됨 (2026-05-10).
+# 사용자가 Windows 절대경로 (예: C:/Users/.../...) 로 override 하면 terraform.exe
+# 는 통과하지만 inventory.ini 에 그대로 박혀 WSL ansible 의 ProxyCommand 가 키
+# 파일 찾지 못함. 2026-05-09 + 2026-05-10 두 번 발견된 함정이라 변수 자체를 제거.
+# inventory.tftpl 이 ssh_key_name 으로부터 '~/.ssh/${ssh_key_name}' 자동 derive.

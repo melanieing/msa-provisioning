@@ -11,9 +11,12 @@
 
 
 # ─── SSH Key Pair (모든 EC2 공통) ──────────────────────────────────
+# pathexpand() 가 '~/.ssh/...' 같은 표현을 host OS 의 home 경로로 확장.
+# Windows 에선 'C:/Users/<user>/.ssh/...', Linux/WSL 에선 '/home/<user>/.ssh/...'.
+# 사용자가 어떤 환경에서 terraform 돌리든 default('~/...') 가 그대로 작동.
 resource "aws_key_pair" "this" {
   key_name   = var.ssh_key_name
-  public_key = file(var.ssh_public_key_path)
+  public_key = file(pathexpand(var.ssh_public_key_path))
 }
 
 

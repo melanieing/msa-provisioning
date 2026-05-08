@@ -43,9 +43,16 @@
 # worker_instance_type = "t3.small"
 
 # ─── SSH / IAM ──────────────────────────────────────────────────────
+# ⚠️ SSH key path 절대 Windows 절대경로 (C:/Users/.../) 로 override 하지 말 것.
+#    terraform.exe (Windows) 는 통과하지만 inventory.ini 에 그대로 박혀 WSL ansible
+#    의 ProxyCommand 가 키 파일 못 찾고 'Connection closed by UNKNOWN port 65535'
+#    로 silently fail (2026-05-09 + 2026-05-10 두 번 발견됨).
+#    → default('~/.ssh/...') 가 Windows + WSL 양쪽 모두 작동 (유일한 안전한 표현).
+#    → ssh_private_key_path 변수는 의도적으로 제거됨 — inventory 가 ssh_key_name 으로
+#      자동 derive.
+#
 # ssh_key_name                   = "ktcloud-bastion-node-key"
-# ssh_public_key_path            = "~/.ssh/ktcloud-bastion-node-key.pub"
-# ssh_private_key_path           = "~/.ssh/ktcloud-bastion-node-key"
+# ssh_public_key_path            = "~/.ssh/ktcloud-bastion-node-key.pub"   # pathexpand 로 ~ 자동 확장
 # node_iam_role_name             = "ktcloud-cluster-node-role"
 # node_iam_instance_profile_name = "ktcloud-node-profile"
 

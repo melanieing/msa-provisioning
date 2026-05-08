@@ -8,11 +8,11 @@
 # ─── SSH 접속 명령어 (편의용) ─────────────────────────────────────
 
 output "ap-northeast-2a-bastion-node-connect-command" {
-  value = "ssh ec2-user@${module.compute.bastion_a_public_ip} -i ${var.ssh_private_key_path}"
+  value = "ssh ec2-user@${module.compute.bastion_a_public_ip} -i ~/.ssh/${var.ssh_key_name}"
 }
 
 output "ap-northeast-2b-bastion-node-connect-command" {
-  value = "ssh ec2-user@${module.compute.bastion_b_public_ip} -i ${var.ssh_private_key_path}"
+  value = "ssh ec2-user@${module.compute.bastion_b_public_ip} -i ~/.ssh/${var.ssh_key_name}"
 }
 
 # kubeadm init 을 실행할 main-master 에 한 번에 접속 (bastion 경유)
