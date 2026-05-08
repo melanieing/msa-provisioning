@@ -11,16 +11,27 @@
 |---|---|
 | **마감일** | 2026-05-20 |
 | **남은 일수** | 11일 |
-| **현재 위치** | 어제 발견한 3개 sync 이슈 모두 fix 완료. 다음: cluster-bootstrap 재실행해서 진짜 deploy 검증 |
-| **진행률** | Phase A 100%, **Phase B 95%** (3 fix 적용, 검증 대기), Phase C 0%, Phase D 70% |
-| **AWS 비용 사용량** | 클러스터 destroy 상태 (어제 종료). 이번 부트스트랩 재실행 시 시간당 ~553 KRW |
+| **현재 위치** | 어제 fix 한 3개 sync 이슈 모두 cluster-bootstrap 으로 검증 완료 ✅. 새 이슈 2개 발견: D (Strimzi 1.0 v1beta2 제거), E (ECR pull 인증) |
+| **진행률** | Phase A 100%, **Phase B 92%** (어제 3개 검증, 새 D/E 잡는 중), Phase C 0%, Phase D 75% |
+| **AWS 비용 사용량** | 클러스터 가동 중 (시간당 ~553 KRW). 작업 끝나면 destroy |
 
 ### 다음 우선순위 (순서대로)
 
-1. **cluster-bootstrap.ps1 재실행** — 어제 fix + 오늘 fix 다 적용된 상태로 첫 깨끗한 deploy 검증.
-2. **ArgoCD UI 에서 7+ Application 모두 Synced/Healthy 확인** — projects, platform-operators-app, platform-data-app, platform-observability-app, 그 자식 9개, 마이크로서비스 4개.
-3. **마이크로서비스 Pod 가 실제로 실행되는지 확인** — `kubectl get pods -A`. CrashLoopBackOff 발생 시 DB 연결/configmap 문제 디버깅.
+1. **🟡 Issue D fix (in progress)** — `_kafka/*.yaml` 의 `kafka.strimzi.io/v1beta2` → `v1` 으로. push 후 ArgoCD 가 재 sync.
+2. **🔴 Issue E — ECR pull 인증** — K8s 1.27+ 부터 kubelet 내장 ECR auth 제거됐는데 `ecr-credential-provider` 플러그인 미설치. 해결 옵션: (a) Ansible 로 노드별 플러그인 설치 (정공법, 별도 playbook), (b) imagePullSecret 수동 (12h 만료, stopgap), (c) ECR 토큰 자동 갱신 CronJob.
+3. **마이크로서비스 Pod Healthy 확인** — D + E fix 후 user-api-gateway / product / order / inventory 4개 Pod 가 실제 Running 인지.
 4. **[Phase C-1]** JWT secret + DB 비밀번호 K8s Secret 으로 옮기기.
+
+### ✅ 오늘 검증 완료 (어제 fix 의 결과)
+
+- **이슈 A — platform-of-apps 분리**: 새 부모 3개 (operators-app/data-app/observability-app) 모두 Healthy/Synced. recurse:false 가 raw CR 직접 적용 차단함 — 의도대로 동작.
+- **이슈 B — apps Namespace whitelist**: 4 microservice Application 모두 Synced (Namespace 생성됨). 더 이상 "resource :Namespace is not permitted" 에러 없음.
+- **이슈 C — Helm 차트 group/version empty**: 4 microservice 차트 모두 manifest 정상 적용. 더 이상 "groupVersion shouldn't be empty" 에러 없음.
+
+### 🆕 오늘 부트스트랩 검증 중 발견된 새 이슈 2개
+
+- **이슈 D**: `kafka-cluster` Application 에서 `The Kubernetes API could not find version "v1beta2" of kafka.strimzi.io/Kafka. Version "v1" is installed`. 원인: Strimzi 0.45 → 1.0.0 업그레이드 (어제) 시 메이저 변경 — `v1beta2` 제거. 우리 yaml 8곳 (kafka-cluster.yaml ×3, topics.yaml ×5) 갱신 필요. **fix 적용 완료, push 대기**.
+- **이슈 E**: 마이크로서비스 Pod 들이 `Failed to pull image: ... no basic auth credentials`. 원인: K8s 1.27+ 부터 kubelet 내장 ECR 자동 인증 제거됨. K8s 1.35 는 `ecr-credential-provider` 플러그인이 노드별 설치돼야 함. IAM Role 의 ECR pull 권한은 이미 있지만 kubelet 이 그걸 활용 못함. **다음 세션 핵심 작업** — Ansible playbook 작성 후보. 면접 답변 가치 큼.
 
 ### ✅ 오늘 fix 완료 (3건)
 
@@ -46,7 +57,15 @@
 
 ## ✅ 완료 (역순, 최근 → 옛날)
 
-### 2026-05-10
+### 2026-05-10 (오후 — 부트스트랩 검증)
+- ✅ **🎉 어제 fix 한 3개 sync 이슈 cluster-bootstrap 으로 검증 완료** — A (platform-of-apps 분리 + recurse:false), B (apps Namespace whitelist), C (Helm chart group/version empty) 모두 의도대로 동작. ArgoCD UI 에서 platform-operators-app / platform-data-app / platform-observability-app 모두 Healthy/Synced. 4 microservice Application 모두 Synced (Pod 단계 진행 중).
+- 🐛 **새 이슈 2개 발견** (어제와 무관):
+  - **이슈 D — Strimzi 1.0.0 의 v1beta2 제거**: `kafka.strimzi.io/v1beta2` 가 더 이상 cluster 에 등록 안 됨 (메이저 업그레이드 영향). `_kafka/kafka-cluster.yaml` (3곳) + `_kafka/topics.yaml` (5곳) 의 apiVersion 을 `v1` 로 변경. **fix 완료, push 후 ArgoCD 재sync 대기**.
+  - **이슈 E — ECR pull "no basic auth credentials"**: K8s 1.27 부터 kubelet 내장 ECR 인증 제거. K8s 1.35 는 `ecr-credential-provider` 플러그인 필요. Ansible playbook 작성 (다음 세션) 또는 stopgap 으로 imagePullSecret. **미fix**.
+- 부트스트랩 도중 발견된 ssh-agent / Windows 경로 이슈 (어제 fix 한 것의 재발) → terraform.tfvars 에 다시 들어간 ssh_private_key_path 라인 영구 제거. 이번엔 두 번째라 영구 fix 가 필요한 듯 (terraform.tfvars.example 나 README 안내 갱신 검토).
+- 두 번째 terraform apply 시 15+15 churn 발생 (EC2/EIP 일부 재생성). 원인 미확인 — 비용 영향 미미. 다음 세션에서 추적 가능.
+
+### 2026-05-10 (오전)
 - ✅ **🐛 어제 발견된 3개 sync 이슈 모두 fix** (재부트스트랩 검증 대기):
   - **이슈 A — platform-of-apps 분리**: `bootstrap/platform-of-apps.yaml` 삭제 + 3개 신규 (`platform-operators-app.yaml` / `platform-data-app.yaml` / `platform-observability-app.yaml`). 각자 자기 서브폴더만 watch + **`recurse: false`** (옛 recurse:true 가 `_postgres/_kafka/_redis` raw CR 직접 apply 시도해서 CRD 인식 실패). 자식 Application 들이 자기 CR 처리하도록 위임. 부모 wave 는 -50 / -40 / -30 으로 dependency 정의. 관련 파일 코멘트 / README 도 같이 갱신 (`msa-argocd-manifest/README.md`, `platform/README.md`, `cnpg-operator.yaml`, `apps-appset.yaml`, `STACK.md`, `argocd-setup.yaml`).
   - **이슈 B — apps AppProject Namespace 허용**: `projects/apps-project.yaml` 의 `clusterResourceWhitelist: []` → `[{group: "", kind: Namespace}]`. CRD/ClusterRole 은 여전히 차단해서 마이크로서비스 권한 안전장치 유지.
