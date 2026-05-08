@@ -41,9 +41,15 @@
 
     # 두 정보를 임시 가상 호스트(K8S_VARS_HOLDER)에 변수로 저장.
     # 다음 play 에서 hostvars['K8S_VARS_HOLDER']['shared_join_cmd'] 로 접근.
+    #
+    # ansible_connection=local 이 핵심 — 이 가상 host 는 변수 holder 로만 쓸 거라
+    # SSH 시도하면 안 됨. 이거 없으면 add_host 후 inventory 에 등록된 'K8S_VARS_HOLDER' 가
+    # 'hosts: all' 패턴을 가진 다음 playbook (예: ecr-credential-provider-setup) 에서
+    # 매칭되어 SSH 시도 → 가짜 host 라 unreachable=1 → ansible exit code 비-0 → bootstrap 실패.
     - name: join 정보를 다음 play 로 전달 (가상 호스트 사용)
       ansible.builtin.add_host:
         name: "K8S_VARS_HOLDER"
+        ansible_connection: local                 # SSH 안 함 (변수 holder 전용)
         shared_join_cmd: "{{ join_cmd_raw.stdout | trim }}"
         shared_cert_key: "{{ cert_key_raw.stdout | trim }}"
 
