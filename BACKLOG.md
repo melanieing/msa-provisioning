@@ -80,6 +80,7 @@
 | **P** | metrics-server 미설치 — `kubectl top` 안 됨. ansible playbook 으로 install 또는 helm. | Medium |
 | **Q** | Grafana service port-forward hang — `svc/kube-prometheus-stack-grafana 3000:80` 으로 port-forward 시 endpoint 못 찾음. svc selector 또는 port spec 검토. | Low |
 | **R** | build-and-push.yml paths 필터에 `**/application.yaml` 추가 — 단독 yaml 변경 시 build trigger 안 됨. 오늘 D11 commit 의 paths 매칭으로 우연히 해결됐지만 영구 fix 필요. | Low |
+| **S** | ✅ 완료 (2026-05-12) — cluster-teardown.ps1 의 orphan EBS cleanup. terraform destroy 가 EC2 만 죽여서 PVC 가 만든 dynamic EBS 가 cleanup 안 되던 문제. 사용자가 콘솔에서 옛 37 개 일괄 삭제 (~5,500원 손실). teardown.ps1 에 3 step (PVC 명시 삭제 + 60s wait → terraform destroy → safety net AWS CLI) 추가. 다음 destroy 부터 자동. |
 
 ### ✅ 오늘 검증 완료 (어제 fix 의 결과)
 
