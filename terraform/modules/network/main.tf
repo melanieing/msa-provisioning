@@ -141,3 +141,86 @@ resource "aws_route_table_association" "private_b" {
   subnet_id      = aws_subnet.private_b.id
   route_table_id = aws_route_table.private_b.id
 }
+
+
+# ─────────────────────────────────────────────────────────────────────────
+# A6 — VPC Endpoint (PDF §5.1)
+# ─────────────────────────────────────────────────────────────────────────
+# VPC Endpoint = VPC 안에서 AWS 서비스로 가는 트래픽을 인터넷 대신 AWS 백본
+#   망으로 보내는 사설 통로. NAT 비용 절약 + 보안 강화 (트래픽이 인터넷 안 탐).
+#
+# 두 종류:
+#   1. Gateway Endpoint  — S3, DynamoDB 만 지원. 무료. Route Table 에 entry
+#                          추가 형태. 본 프로젝트는 S3 (ECR 이미지 layer 가
+#                          내부적으로 S3 에 저장됨, ECR pull 시 트래픽 절약).
+#   2. Interface Endpoint — 거의 모든 AWS 서비스. AZ 마다 ENI 1개 = 시간당
+#                          ~0.014 USD/AZ + 데이터 처리비. 본 프로젝트는 KMS
+#                          (EFS 의 KMS 호출 + ECR 의 KMS 호출이 NAT 안 타도록).
+#
+# 비용:
+#   - S3 gateway: 무료
+#   - KMS interface ×2 AZ: 시간당 ~0.028 USD ≈ 38원/h. 9일 4h/일 운영 ≈ 1,400원
+# ─────────────────────────────────────────────────────────────────────────
+
+
+# ─── 현재 region 자동 조회 (provider 설정 따라옴) ─────────────────
+data "aws_region" "current" {}
+
+
+# ─── S3 Gateway Endpoint ──────────────────────────────────────────
+# Route Table 에 'pl-xxxxxx (S3 prefix list)' → endpoint 라는 entry 자동 추가.
+# 두 private RT 에 모두 attach (AZ A, AZ B 의 EC2 모두 사용 가능).
+resource "aws_vpc_endpoint" "s3" {
+  vpc_id            = aws_vpc.this.id
+  service_name      = "com.amazonaws.${data.aws_region.current.name}.s3"
+  vpc_endpoint_type = "Gateway"
+
+  route_table_ids = [
+    aws_route_table.private_a.id,
+    aws_route_table.private_b.id,
+  ]
+}
+
+
+# ─── Interface Endpoint 전용 SG ───────────────────────────────────
+# Interface endpoint 의 ENI 가 살 SG. VPC 안 자원에서 HTTPS(443) 인바운드 허용.
+# (예: EC2 노드가 KMS API 호출 시 ENI 의 443 으로 들어옴)
+resource "aws_security_group" "vpc_endpoint" {
+  vpc_id      = aws_vpc.this.id
+  name        = "vpc-endpoint-sg"
+  description = "Allow HTTPS 443 from VPC for AWS service interface endpoints"
+
+  ingress {
+    from_port   = 443
+    to_port     = 443
+    protocol    = "tcp"
+    cidr_blocks = [var.vpc_cidr]
+    description = "HTTPS from anywhere in VPC"
+  }
+
+  # Endpoint ENI 가 응답 보낼 때 필요. 보통 보수적이지만 endpoint 에서는 all egress 가 표준.
+  egress {
+    from_port   = 0
+    to_port     = 0
+    protocol    = "-1"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+}
+
+
+# ─── KMS Interface Endpoint ───────────────────────────────────────
+# private_dns_enabled = true 로 두면 'kms.<region>.amazonaws.com' 이 자동으로
+# endpoint ENI 의 사설 IP 로 resolve 됨. 그래서 EC2 의 AWS SDK 코드 변경 0.
+resource "aws_vpc_endpoint" "kms" {
+  vpc_id              = aws_vpc.this.id
+  service_name        = "com.amazonaws.${data.aws_region.current.name}.kms"
+  vpc_endpoint_type   = "Interface"
+  private_dns_enabled = true
+
+  subnet_ids = [
+    aws_subnet.private_a.id,
+    aws_subnet.private_b.id,
+  ]
+
+  security_group_ids = [aws_security_group.vpc_endpoint.id]
+}
