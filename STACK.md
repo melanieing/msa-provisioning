@@ -122,7 +122,7 @@
 | **Gradle** | 8.14.4 | ✅ 적용 (2026-05-08) | wrapper jar 누락 fix. Spring Initializr 에서 추출 |
 | **Spring Boot** | **3.5.14** | ✅ 적용 (2026-05-08) | PDF 4.1절. `./gradlew assemble` 14개 모듈 통과 |
 | **Spring Cloud Gateway** | 4.3.0 | ✅ 적용 | user-api-gateway. Spring Boot 3.5 짝 |
-| **Resilience4j** | Spring Cloud 매칭 | ⏳ **예정** | Circuit Breaker, Fallback 미구현 |
+| **Resilience4j** | **2.2.0** (spring-boot3 + kotlin + reactor) | ✅ 적용 (2026-05-12) | C3 — 4 gRPC client 호출에 @CircuitBreaker. slidingWindow=10 / failureRate=50% / waitDuration=10s. fallbackMethod 으로 빈 응답. |
 | **gRPC** | grpc-java 매칭 | ✅ 적용 | 서비스 간 내부 통신 (PDF 허용 범위) |
 | **QueryDSL** | kapt 통해 | ✅ 적용 | 동적 쿼리 |
 | **Redisson** | 3.27.2 | ✅ 적용 | 분산 락 |
@@ -133,11 +133,11 @@
 
 | 서비스 | 상태 | 비고 |
 |---|---|---|
-| user-api-gateway | 🟡 골격 (JWT/RateLimit 미구현) | 단일 진입점 + WebFlux + gRPC clients |
+| user-api-gateway | ✅ 단일 진입점 + JWT 인증 (C1) + Rate Limit (C2) + Circuit Breaker (C3) | WebFlux + gRPC clients. /auth/login JWT 발급 + Bearer 토큰 검증. Redisson RRateLimiter (cluster-wide). 4 gRPC 호출에 @CircuitBreaker + fallback. |
 | product-service | ✅ gRPC 구현됨 | port 9001 |
-| order-service | ✅ gRPC + Outbox 테이블 | port 9002. Saga 보상 로직 ⏳ |
-| inventory-service | ✅ gRPC + Event Sourcing + Lua | port 9003 |
-| notification-service | ❌ 미구현 | Phase B-3 또는 이후 |
+| order-service | ✅ gRPC + Outbox + Poller (C4) | port 9002. @Scheduled(5s) processAll(). Transactional Outbox 4 component 완성. Saga 보상 로직 (C7) ⏳ |
+| inventory-service | ✅ gRPC + Event Sourcing + Lua + Redis Cluster | port 9003 |
+| notification-service | ✅ 최소 구현 (C5, 2026-05-12) | 4 토픽 구독 (order.pending / inventory_reserved / confirmed / cancelled) + logger.info 단일 채널. PDF 의 SMS/이메일 descope. |
 
 ---
 
@@ -231,6 +231,7 @@
 
 | 일자 | 변경 |
 |---|---|
+| 2026-05-12 | **묶음 ① 백엔드 Must 작성 완료** — C1+C2+C3+C4+C5. Resilience4j 2.2.0 도입. notification-service 모듈 신규. user-api-gateway 의 anyExchange permitAll → authenticated 전환. Phase C: 12% → 75%. 검증 부트스트랩 대기. |
 | 2026-05-11 | **부트스트랩 검증 통과 (ArgoCD 19/19 Synced/Healthy)**. N (Strimzi watchAnyNamespace=true), D3 partial (Loki SingleBinary, OTel contrib), root-app cosmetic 추가. 다음 라운드 후보 5개 발견 (A++b/O/P/Q/R). |
 | 2026-05-11 | A5 (KMS CMK + EFS SSE), A6 (VPC Endpoint S3 gateway + KMS interface), C8 (JWT K8s Secret), D11 (Trivy GHA scan) 4개 묶음 추가. |
 | 2026-05-11 | emberstack/reflector 10.0.41 추가 (Issue L). CNPG inheritedMetadata + redis-secret annotation 으로 cross-namespace Secret 자동 복제. |

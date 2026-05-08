@@ -11,19 +11,25 @@
 |---|---|
 | **마감일** | 2026-05-20 |
 | **남은 일수** | 9일 |
-| **현재 위치** | **2026-05-11 종료 — 7 fix + N + D3 partial + root-app cosmetic 묶음 검증 완료, ArgoCD 19/19 Synced/Healthy**. 클러스터 destroy 예정. |
-| **진행률** | Phase A 95% (A5/A6 완료, A4/A++/A++b 잔여), **Phase B 100%** ⬆ (microservice 4개 + Kafka + Redis + Postgres + reflector 다 동작 검증), Phase C 12% (C8 완료, C1~C7 잔여), **Phase D 85%** ⬆ (D1 + D11 + D3 partial 완료, D2/D3 풀스택/D4~D10/D12 잔여) |
-| **AWS 비용 사용량** | 2026-05-11 부트스트랩 1회 (검증). destroy 후 0. 12일째 누적: 50,000원 추정. |
+| **현재 위치** | **묶음 ① 백엔드 Must (C1+C2+C3+C4+C5) 작성 완료, 검증 직전**. 3 commit msa-spring-boot main + 1 commit msa-argocd-manifest. GHA 자동 트리거 → 5 service × 2 tag ECR build + Trivy scan. 다음 단계 = 부트스트랩 1회 검증. |
+| **진행률** | Phase A 95% (A5/A6 완료, A4/A++/A++b 잔여), **Phase B 100%** (microservice 다 검증), **Phase C 75%** ⬆⬆ (C1+C2+C3+C4+C5+C8 = 6/8 완료, C6/C7 만 잔여 + 모두 Should), **Phase D 85%** (D1 + D11 + D3 partial 완료) |
+| **AWS 비용 사용량** | 어제 부트스트랩 1회 (검증). 묶음 ① 작성은 클러스터 무관. 묶음 ① 검증 부트스트랩 1회 예정. |
 
 ### 다음 우선순위 (순서대로)
 
-**다음 라운드 = 묶음 ① 백엔드 Must (C1+C2+C3+C4+C5)**. 모두 클러스터 꺼둔 채 작성 가능, 검증 1회 부트스트랩 (~45분, ~380원).
+**검증 부트스트랩 → 묶음 ② → ③ 순서**.
 
-1. **C1** — JWT 인증 필터 (user-api-gateway). Spring Cloud Gateway 의 GlobalFilter 또는 reactive WebFilter + JJWT 검증. C8 으로 secret 이미 envFrom 주입됨. 401/200 응답 분기.
-2. **C2** — Rate Limit 필터 (Token Bucket). Spring Cloud Gateway 의 `RequestRateLimiter` + Redisson 또는 RedisRateLimiter. user-api-gateway chart 에 SPRING_DATA_REDIS_CLUSTER_NODES 추가 (현재 inventory 만 redis 사용).
-3. **C3** — Resilience4j Circuit Breaker. resilience4j-spring-boot3 의존성 + application.yaml 설정 + gRPC client 호출에 @CircuitBreaker(fallbackMethod=...).
-4. **C4** — Outbox Poller. order-service 에 `@Scheduled(fixedRate=5000)` + KafkaTemplate.send. `@EnableScheduling` 활성.
-5. **C5** — notification-service 최소 구현. 새 모듈 + KafkaListener (4 토픽 구독) + 단일 채널 스텁 (이메일 또는 로그). build-and-push.yml matrix 에 추가.
+1. **🟢 묶음 ① 검증 부트스트랩** — C1+C2+C3+C4+C5 가 ECR 새 image 로 부트스트랩 시 자동 적용. 검증 6개:
+   - JWT 인증: `curl -X POST gateway/auth/login {admin/admin}` → 토큰 → `curl -H "Authorization: Bearer <token>"` (401/200)
+   - Rate Limit: `for i in {1..30}; do curl gateway/api/v1/products; done` (429 발생)
+   - Circuit Breaker: `kubectl scale deploy/product-service --replicas=0` 후 호출 (fallback 응답 + log)
+   - Outbox Poller: `kubectl logs -n order-service deploy/order-service | grep outbox-poller` (5초 주기 polling) + Kafka 메시지 도달
+   - notification: `kubectl logs -n notification-service deploy/notification-service` (📨 메시지 받음)
+   - ArgoCD: notification-service 신규 Application 자동 등록 + 19+1 = **20 Synced/Healthy**
+2. **묶음 ② 관측성 (D2 + D3 풀스택 + D4)** — C1~C5 동작 후 metric/trace/log 가 의미 있어짐. 부수: P (metrics-server) + Q (Grafana svc) 같이.
+3. **묶음 ③ 운영 안정화 (A++b + O + R)** — destroy/bootstrap cycle 매끄러움. 묶음 ② 와 동시 가능.
+4. **D8 Newman E2E** — Postman + Newman 시나리오 (C1~C5 활용한 E2E flow).
+5. **D7 정적 페이지** + **D12 발표 자료** — 마감 직전.
 
 **그 다음 라운드 = 묶음 ② 관측성 (D2+D3 풀스택+D4)**:
 - D2 OTel Java SDK + agent → 5 microservice
@@ -130,6 +136,16 @@
 ---
 
 ## ✅ 완료 (역순, 최근 → 옛날)
+
+### 2026-05-12 (묶음 ① 백엔드 Must 작성 완료, 검증 대기)
+- ✅ **C4 — Outbox Poller**: 5초 주기 @Scheduled 가 application service 의 `processAll()` 호출. fetch + publish + state 변경 다 application service 가 알아서. Transactional Outbox 4 component 완성.
+- ✅ **C5 — notification-service 새 모듈**: 5번째 마이크로서비스. KafkaListener 4 토픽 구독 + logger.info 단일 채널. settings.gradle.kts 등록 + chart + Dockerfile + GHA matrix 추가.
+- ✅ **C1 — JWT 인증 필터**: JwtTokenProvider (JJWT 0.12.6 + HMAC-SHA) + JwtAuthenticationWebFilter (Bearer 토큰 → ReactiveSecurityContextHolder) + AuthRestController POST /auth/login (학습용 demo user). SecurityConfig 의 anyExchange permitAll → authenticated.
+- ✅ **C2 — Rate Limit 필터**: RateLimitWebFilter (Redisson RRateLimiter, cluster-wide). IP 기반 key (학습용). 초과 시 429 + Retry-After. SecurityConfig 의 SecurityWebFiltersOrder.HTTP_BASIC 위치 (JWT 보다 앞). chart values + msa-argocd-manifest 의 redis-secret reflector annotation 에 user-api-gateway ns 추가.
+- ✅ **C3 — Resilience4j Circuit Breaker**: resilience4j-{spring-boot3,kotlin,reactor} 2.2.0. 4 service file (Product/Order/Inventory Query + Order Command) 의 gRPC 호출에 @CircuitBreaker + fallbackMethod. application.yaml 에 3 instance config (slidingWindow=10, failureRate=50%, waitDuration=10s).
+- 📦 4 commit (msa-spring-boot 3 + msa-argocd-manifest 1) main push.
+- 자체 검증: 5+1 모듈 ./gradlew compileKotlin BUILD SUCCESSFUL + 5 chart helm lint pass.
+- 다음 단계 = 묶음 ① 검증 부트스트랩 (~45분, 6개 검증 명령).
 
 ### 2026-05-11 (스프린트 4일째 — 7 fix + N + D3 partial 묶음 검증 완료)
 - ✅ **부트스트랩 1회로 일괄 검증 성공**. ArgoCD 19/19 Synced/Healthy. 모든 namespace Pod Running. PVC 16개 Bound to gp3. K8s 1.35.4 6 nodes Ready.
@@ -267,14 +283,14 @@
 
 | ID | 항목 | 상태 | 영향 | 우선순위 |
 |---|---|---|---|---|
-| C1 | JWT 인증 필터 (게이트웨이) | ⏳ | 보안 — 현재 permitAll | Must |
-| C2 | Rate Limit 필터 (Token Bucket) | ⏳ | 보안 / 안정성 | Must |
-| C3 | Resilience4j Circuit Breaker | ⏳ | 가용성 (PDF 핵심) | Must |
-| C4 | Outbox Poller (`@Scheduled`) | ⏳ | 메시지 At-least-once 보증 | Must |
-| C5 | notification-service 최소 구현 | ⏳ | 5번째 서비스 | Must (descope 시 단일 채널) |
+| C1 | JWT 인증 필터 (게이트웨이) | ✅ 작성 완료 (검증 대기) | 보안 | Must — JwtTokenProvider + JwtAuthenticationWebFilter + AuthRestController + SecurityConfig 갱신. permitAll path 외 모두 인증. /auth/login 학습용 demo user. |
+| C2 | Rate Limit 필터 (Token Bucket) | ✅ 작성 완료 (검증 대기) | 보안 / 안정성 | Must — RateLimitWebFilter (Redisson RRateLimiter, cluster-wide). IP 기반 key. 초과 시 429. fail-open. SecurityWebFiltersOrder.HTTP_BASIC. |
+| C3 | Resilience4j Circuit Breaker | ✅ 작성 완료 (검증 대기) | 가용성 (PDF 핵심) | Must — resilience4j 2.2.0 (spring-boot3 + kotlin + reactor). 4 service file 의 gRPC 호출에 @CircuitBreaker + fallbackMethod. slidingWindowSize=10, failureRateThreshold=50%. |
+| C4 | Outbox Poller (`@Scheduled`) | ✅ 작성 완료 (검증 대기) | 메시지 At-least-once 보증 | Must — OrderInventoryRequestOutboxPoller (order 모듈). @Scheduled(fixedRate=5000) → processAll() (이미 있던 application service 호출). @EnableScheduling. Transactional Outbox 4 component 완성. |
+| C5 | notification-service 최소 구현 | ✅ 작성 완료 (검증 대기) | 5번째 서비스 | Must — 새 모듈. NotificationKafkaListener 4 토픽 구독 + logger.info 단일 채널. chart + GHA matrix 추가. ApplicationSet 자동 등록. |
 | C6 | IdempotentEventAspect 구현 | ⏳ | 중복 메시지 방지 | Should |
 | C7 | Saga 보상 로직 1개 (재고부족→주문취소) | ⏳ | 분산 트랜잭션 | Should |
-| C8 | JWT secret 등 → K8s Secret | ✅ 완료 (2026-05-11) | 보안 | Must — user-api-gateway chart 에 secret.yaml + envFrom + application.yaml 의 hardcoded 제거. 학습용 평문 (values.yaml 에 들어감), 운영급 wiring 패턴 갖춤 → 향후 Sealed Secrets 로 source 만 교체. |
+| C8 | JWT secret 등 → K8s Secret | ✅ 완료 (2026-05-11) | 보안 | Must — user-api-gateway chart 에 secret.yaml + envFrom + application.yaml 의 hardcoded 제거. |
 
 ---
 
