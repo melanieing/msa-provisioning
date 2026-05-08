@@ -35,6 +35,9 @@
 
     # ─── 2. LBC 본체 설치 ──────────────────────────────────────────
     # Helm 으로 차트 설치. values 는 이 yaml 안에서 직접 지정.
+    # wait: true — LBC Deployment 가 Ready 될 때까지 대기 (필수).
+    # 안 그러면 다음 단계 (argocd 설치) 의 Service 생성이 LBC 의 mutating webhook
+    # 호출 시 LBC Pod 가 아직 안 떠 있어 timeout 발생.
     - name: AWS Load Balancer Controller Helm 차트 설치
       kubernetes.core.helm:
         name: aws-load-balancer-controller
@@ -42,6 +45,8 @@
         release_namespace: "{{ lbc_namespace }}"
         kubeconfig: "/home/ec2-user/.kube/config"
         create_namespace: true
+        wait: true                                 # LBC Pod 가 Ready 될 때까지 대기
+        wait_timeout: 5m                           # 5분 안에 Ready 못 되면 실패
         values:
           clusterName: "{{ cluster_name }}"
           serviceAccount:
@@ -50,3 +55,9 @@
           vpcId: "{{ vpc_id }}"                    # inventory.ini 에서 주입된 VPC ID
           region: "{{ aws_region }}"
       register: helm_install_result
+
+    # ─── 3. LBC webhook 가 실제 응답하는지 검증 ──────────────────
+    # wait:true 로 Pod 가 Ready 라도 webhook 등록은 비동기. 안전하게 짧은 sleep.
+    - name: LBC webhook endpoint 가 응답하기까지 대기 (10s)
+      ansible.builtin.pause:
+        seconds: 10

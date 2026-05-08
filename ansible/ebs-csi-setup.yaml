@@ -1,0 +1,97 @@
+# ─────────────────────────────────────────────────────────────────────────
+# AWS EBS CSI Driver 설치 + default StorageClass 생성
+# ─────────────────────────────────────────────────────────────────────────
+# K8s 1.27+ 부터 kubelet 의 in-tree volume plugin 들이 제거됨 (CSI migration).
+# 따라서 EBS 같은 Cloud volume 을 PVC 로 쓰려면 별도의 CSI driver 설치 필수.
+#
+# 설치 후 효과:
+#   - PVC 만들면 driver 가 자동으로 EBS 볼륨 생성/attach
+#   - CNPG / Strimzi / Redis Operator 의 PVC 들이 모두 Bound 로 전환
+#
+# 설치 위치: kube-system namespace
+# 작동 노드: DaemonSet 으로 모든 노드에 node 컴포넌트 + master 에 controller pods
+#
+# IAM 권한: 노드 Role 에 'AmazonEBSCSIDriverPolicy' 부착돼 있어야 함.
+# (terraform/modules/compute/main.tf 에서 부착)
+#
+# 관련 BACKLOG: 이슈 G (2026-05-10 발견)
+# ─────────────────────────────────────────────────────────────────────────
+
+- name: AWS EBS CSI Driver 설치 + default StorageClass 생성
+  hosts: main-master                                 # main-master 한 곳에서 helm 명령 실행
+  become: true
+
+  vars:
+    ebs_csi_namespace: "kube-system"
+    ebs_csi_chart_version: "2.36.0"                 # 2026-04-01 release, 2026-05 기준 stable
+    aws_region: "ap-northeast-2"
+
+  tasks:
+
+    # ─── 1. AWS EBS CSI Driver Helm 저장소 추가 ──────────────────
+    - name: AWS EBS CSI Driver Helm 저장소 추가
+      kubernetes.core.helm_repository:
+        name: aws-ebs-csi-driver
+        repo_url: "https://kubernetes-sigs.github.io/aws-ebs-csi-driver"
+
+    - name: Helm 저장소 인덱스 갱신
+      ansible.builtin.command: helm repo update
+
+    # ─── 2. EBS CSI Driver 설치 ───────────────────────────────────
+    # 노드 IAM Role 의 AmazonEBSCSIDriverPolicy 사용 (IRSA 안 씀, 단순화).
+    - name: AWS EBS CSI Driver Helm 차트 설치
+      kubernetes.core.helm:
+        name: aws-ebs-csi-driver
+        chart_ref: aws-ebs-csi-driver/aws-ebs-csi-driver
+        chart_version: "{{ ebs_csi_chart_version }}"
+        release_namespace: "{{ ebs_csi_namespace }}"
+        kubeconfig: "/home/ec2-user/.kube/config"
+        create_namespace: false                      # kube-system 이미 존재
+        values:
+          # IRSA 안 쓰고 EC2 InstanceProfile 의 IAM Role 사용
+          controller:
+            serviceAccount:
+              create: true
+              name: ebs-csi-controller-sa
+          node:
+            serviceAccount:
+              create: true
+              name: ebs-csi-node-sa
+
+    # ─── 3. Default StorageClass 생성 (gp3) ──────────────────────
+    # PVC 가 storageClassName 명시 안 하면 default 사용.
+    # gp3 가 gp2 대비 IOPS/throughput 더 높고 가격 비슷해서 default 로 추천.
+    # WaitForFirstConsumer: Pod 가 어느 노드에 schedule 되는지 보고 그 AZ 의 EBS 생성.
+    - name: Default StorageClass (gp3) 생성
+      kubernetes.core.k8s:
+        kubeconfig: "/home/ec2-user/.kube/config"
+        state: present
+        definition:
+          apiVersion: storage.k8s.io/v1
+          kind: StorageClass
+          metadata:
+            name: gp3
+            annotations:
+              storageclass.kubernetes.io/is-default-class: "true"   # default 표시
+          provisioner: ebs.csi.aws.com
+          volumeBindingMode: WaitForFirstConsumer    # multi-AZ cluster 에서 권장
+          reclaimPolicy: Delete                       # PVC 지우면 EBS 도 삭제
+          allowVolumeExpansion: true                  # 나중에 volume 크기 늘리기 가능
+          parameters:
+            type: gp3
+            encrypted: "true"                         # 보안: 모든 EBS 암호화
+            # iops, throughput 은 default 로 (3000 IOPS, 125 MB/s)
+
+    # ─── 4. 검증 (선택) ────────────────────────────────────────────
+    - name: StorageClass 목록 확인
+      ansible.builtin.command: kubectl get storageclass
+      environment:
+        KUBECONFIG: "/home/ec2-user/.kube/config"
+      register: sc_list
+      changed_when: false
+
+    - name: 결과 요약
+      ansible.builtin.debug:
+        msg:
+          - "EBS CSI Driver {{ ebs_csi_chart_version }} 설치 완료"
+          - "{{ sc_list.stdout_lines }}"

@@ -58,26 +58,27 @@ resource "aws_security_group" "cluster_node" {
     cidr_blocks = ["0.0.0.0/0"] # 운영에선 회사/VPN IP 만 허용 권장
   }
 
+  # ─── 자기참조 ingress (Calico IPIP 통과용) ───────────────────
+  # 위 ingress 들은 TCP/UDP/ICMP 만 허용. Calico 기본 모드인 IP-in-IP(protocol 4)
+  # 트래픽은 그래서 막힘 → 같은 SG 멤버끼리 모든 IP 프로토콜 허용 규칙 추가.
+  # 이 규칙 없으면 노드 간 Pod-to-Pod 통신이 안 됨.
+  #
+  # ⚠️ 이 inline ingress 와 별도 'aws_security_group_rule' 리소스를 동시에 쓰면
+  # 매 apply 마다 둘이 source-of-truth 다툼 → 무한 churn (2026-05-10 발견).
+  # 그래서 inline 으로 통합. 별도 리소스는 제거됨.
+  ingress {
+    from_port = 0
+    to_port   = 0
+    protocol  = "-1"
+    self      = true # 같은 SG 의 다른 멤버 모두 허용
+  }
+
   egress {
     from_port   = 0
     to_port     = 0
     protocol    = "-1"
     cidr_blocks = ["0.0.0.0/0"]
   }
-}
-
-
-# ─── 자기참조 ingress (Calico IPIP 통과용) ─────────────────────────
-# 위 ingress 들은 TCP/UDP/ICMP 만 허용. Calico 기본 모드인 IP-in-IP(protocol 4)
-# 트래픽은 그래서 막힘 → 같은 SG 멤버끼리 모든 IP 프로토콜 허용 규칙 추가.
-# 이 규칙 없으면 노드 간 Pod-to-Pod 통신이 안 됨.
-resource "aws_security_group_rule" "cluster_node_self_ingress" {
-  type                     = "ingress"
-  from_port                = 0
-  to_port                  = 0
-  protocol                 = "-1"
-  security_group_id        = aws_security_group.cluster_node.id
-  source_security_group_id = aws_security_group.cluster_node.id
 }
 
 

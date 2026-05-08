@@ -11,17 +11,17 @@
 |---|---|
 | **마감일** | 2026-05-20 |
 | **남은 일수** | 11일 |
-| **현재 위치** | 어제 fix 한 3개 sync 이슈 모두 cluster-bootstrap 으로 검증 완료 ✅. 새 이슈 2개 발견: D (Strimzi 1.0 v1beta2 제거), E (ECR pull 인증) |
-| **진행률** | Phase A 100%, **Phase B 92%** (어제 3개 검증, 새 D/E 잡는 중), Phase C 0%, Phase D 75% |
-| **AWS 비용 사용량** | 클러스터 가동 중 (시간당 ~553 KRW). 작업 끝나면 destroy |
+| **현재 위치** | **D2 day 마무리 — 11개 이슈 진단/해결**. 11 platform/data Application 모두 Healthy/Synced + 10 PVC Bound + 6 nodes Ready. microservice 4개는 K (Redis Cluster 연동) + L (cross-namespace secret 자동화) 만 남음 — 다음 세션 Phase C 영역. 클러스터 destroy 예정. |
+| **진행률** | Phase A 100%, **Phase B 95%** (인프라 + GitOps 다 동작, microservice 코드 영역 잔여), Phase C 5%, Phase D 75% |
+| **AWS 비용 사용량** | 오늘 부트스트랩 ×4 (terraform churn 디버깅 + H fix). 이제 destroy. |
 
 ### 다음 우선순위 (순서대로)
 
-1. **✅ Issue D fix 완료** — kafka v1 으로 변경, push 됨.
-2. **✅ Issue F fix 완료** — KafkaTopic underscore → metadata.name 은 hyphen, spec.topicName 으로 PDF 명세 보존.
-3. **🔴 Issue E — ECR pull 인증** (검증 완료) — K8s 1.27+ 부터 kubelet 내장 ECR auth 제거됐는데 `ecr-credential-provider` 플러그인 미설치. 해결 옵션: (a) Ansible 로 노드별 플러그인 설치 (정공법, 별도 playbook), (b) imagePullSecret 수동 (12h 만료, stopgap), (c) ECR 토큰 자동 갱신 CronJob.
-3. **마이크로서비스 Pod Healthy 확인** — D + E fix 후 user-api-gateway / product / order / inventory 4개 Pod 가 실제 Running 인지.
-4. **[Phase C-1]** JWT secret + DB 비밀번호 K8s Secret 으로 옮기기.
+1. **🔴 Issue K — Redis Cluster 연동** (오늘 발견, 미fix). 마이크로서비스가 Redis 를 `localhost:7005` 로 연결 시도. 원인: ① Spring Boot 3.x 표준은 `spring.data.redis.*` 인데 chart 가 `SPRING_REDIS_*` (2.x legacy) 사용, ② Redisson 라이브러리는 cluster 모드 별도 설정 필요 (cluster nodes URL 명시). chart 수정 + Spring Boot application.yml 수정 + image 재빌드 가능성. **다음 세션 Phase C 본격 작업**.
+2. **🔴 Issue L — cross-namespace Secret 자동화** (오늘 stopgap 만 함). CNPG 가 만든 `<cluster>-app` Secret 은 `data` namespace 에 살아있고, microservice Pod 는 자기 namespace. K8s 의 `secretKeyRef` 는 cross-namespace 안 됨. **stopgap**: 수동 `kubectl get -n data | kubectl apply -n <svc>` (휘발성 — destroy 시 사라짐). **영구 fix 옵션**: (a) emberstack/reflector annotation 기반 복제 (가장 cloud-native), (b) ansible post-bootstrap task 로 5개 secret copy.
+3. **🟡 user-api-gateway graceful shutdown** — 정상 부팅 (~37s) 후 ~2분 만에 K8s 가 kill. 가능성: liveness probe 실패 (J fix 후에도 지속 시), 또는 OOMKilled (Burstable QoS, limit 512Mi 작음). 다음 세션 진단.
+4. **[Phase C-1]** JWT secret K8s Secret 으로 옮기기 (DB 비밀번호는 Issue I/L 으로 일부 해결됨).
+5. **[Phase D-2]** OpenTelemetry SDK 5개 서비스 통합.
 
 ### ✅ 오늘 검증 완료 (어제 fix 의 결과)
 
@@ -34,11 +34,32 @@
 - **이슈 D**: `kafka-cluster` Application 에서 `The Kubernetes API could not find version "v1beta2" of kafka.strimzi.io/Kafka. Version "v1" is installed`. 원인: Strimzi 0.45 → 1.0.0 업그레이드 (어제) 시 메이저 변경 — `v1beta2` 제거. 우리 yaml 8곳 (kafka-cluster.yaml ×3, topics.yaml ×5) 갱신 필요. **fix 적용 완료, push 대기**.
 - **이슈 E**: 마이크로서비스 Pod 들이 `Failed to pull image: ... no basic auth credentials`. 원인: K8s 1.27+ 부터 kubelet 내장 ECR 자동 인증 제거됨. K8s 1.35 는 `ecr-credential-provider` 플러그인이 노드별 설치돼야 함. IAM Role 의 ECR pull 권한은 이미 있지만 kubelet 이 그걸 활용 못함. **다음 세션 핵심 작업** — Ansible playbook 작성 후보. 면접 답변 가치 큼.
 
-### ✅ 오늘 fix 완료 (3건)
+### ✅ 2026-05-10 fix 완료 (오전 3건 + 오후 8건 = 11건)
 
-- **이슈 A — platform-of-apps 분리**: `bootstrap/platform-of-apps.yaml` 삭제, 대신 `platform-operators-app.yaml`(-50) / `platform-data-app.yaml`(-40) / `platform-observability-app.yaml`(-30) 3개 신규. 핵심: **`recurse: false`** 로 부모가 raw CR (`_postgres/_kafka/_redis`) 직접 apply 못 하게 차단. 자식 Application 만 sync 하고, 자식이 자기 서브폴더의 CR 을 sync 하므로 그때엔 CRD 이미 등록된 상태.
-- **이슈 B — apps AppProject Namespace whitelist**: `projects/apps-project.yaml` 의 `clusterResourceWhitelist: []` → `[{group: "", kind: Namespace}]`. ApplicationSet 의 `CreateNamespace=true` 가 `user-api-gateway` 등 namespace 만들 수 있음. CRD/ClusterRole 은 여전히 차단.
-- **이슈 C — Helm 차트 serviceaccount.yaml 의 `{{- if .. -}}` whitespace trim 버그**: `-}}` 가 다음 줄 newline 까지 먹어서 코멘트 라인 (`# ─────`) 과 `apiVersion: v1` 이 한 줄로 붙어버려 `apiVersion` 이 코멘트 안으로 들어감 → manifest 의 group/version 이 비게 됨. 4개 차트 (`user-api-gateway` / `product-service` / `order-service` / `inventory-service`) 모두 `-}}` → `}}` 로 수정. 4개 모두 helm lint + render 통과.
+#### 오전 (어제 발견된 sync 이슈 검증/해결)
+- **이슈 A — platform-of-apps 분리** (msa-argocd-manifest)
+- **이슈 B — apps AppProject Namespace whitelist** (msa-argocd-manifest)
+- **이슈 C — Helm 차트 serviceaccount.yaml whitespace trim 버그** (msa-spring-boot)
+
+#### 오후 (부트스트랩 검증 + 깊은 디버깅)
+- **이슈 D — Strimzi 1.0 v1beta2 제거**: 8 yaml `apiVersion: kafka.strimzi.io/v1beta2 → /v1` (msa-argocd-manifest)
+- **이슈 F — KafkaTopic underscore RFC 1123 위반**: `metadata.name: order.inventory-reserved` (hyphen) + `spec.topicName: order.inventory_reserved` (PDF 보존) (msa-argocd-manifest)
+- **이슈 E — K8s 1.27+ ECR 인증 (in-tree provider 제거)**: `ansible/ecr-credential-provider-setup.yaml` 신규. AWS `amazon-eks` S3 에서 binary 다운로드. KubeletConfiguration field 가 아닌 `KUBELET_EXTRA_ARGS` (CLI flag) 로 적용 (struct 에 imageCredentialProvider* 없음 발견). main.yaml 에서 kubeadm join 후로 위치 (kubelet 가 살아있어야 restart 가능).
+- **이슈 G — EBS CSI driver + default StorageClass**: `ansible/ebs-csi-setup.yaml` 신규. K8s 1.27+ 의 in-tree EBS volume plugin 제거 대응. `gp3` default StorageClass + IAM Role 에 `AmazonEBSCSIDriverPolicy` attach. 10 PVC 즉시 Bound.
+- **이슈 H — DiskPressure (root 8GB → 30GB)**: terraform compute 모듈에 `root_block_device { volume_size = 30, encrypted = true }` 추가 + `var.node_root_volume_size_gb = 30`. master + worker 6개 노드만 (bastion 제외).
+- **terraform churn 영구 fix** (오후 디버깅 핵심):
+  - 원인 #1: aws_instance 의 `security_groups` (EC2-Classic legacy) ↔ `vpc_security_group_ids` 사이 perpetual drift → matrix 매번 force replacement
+  - 원인 #2: `aws_security_group.cluster_node` 의 inline `ingress { ... }` 5개 ↔ 별도 `aws_security_group_rule.cluster_node_self_ingress` 가 source-of-truth 다툼 → SG rule 매번 destroy/create
+  - fix: 8개 EC2 모두 `vpc_security_group_ids` 로 변경 + `lifecycle.ignore_changes = [security_groups]`. 별도 rule 삭제 + `ingress { self = true }` inline 으로 통합.
+  - 검증: 다음 plan 이 `Plan: 0 to add, 0 to change, 1 to destroy` (cleanup 만)
+- **이슈 I — DB password CNPG Secret 주입** (msa-spring-boot): 4 chart deployment.yaml 에 `dbSecretName` 조건부 env block. 3 backend values.yaml 에 `dbSecretName: <svc>-db-app`. (단 cross-namespace 문제는 K-stopgap 으로 우회)
+- **이슈 J — Spring Boot actuator probe sub-paths 404**: 4 chart values.yaml 에 `MANAGEMENT_ENDPOINT_HEALTH_PROBES_ENABLED: "true"`. Spring Boot 3.x 의 K8s 자동감지가 안 되는 경우 강제 활성.
+
+### 📊 Evidence (portfolio 자료)
+- ArgoCD UI 18 Applications (3 platform 부모 + 9 자식 + 4 microservice + projects + root) 대부분 Healthy/Synced
+- 10 PVC 모두 Bound to gp3 (EBS CSI + DiskPressure fix 증명)
+- 6 nodes Ready K8s 1.35.4 (bootstrap + EC2 churn fix 증명)
+- microservice Pod 가 ECR 에서 image pull 후 정상 부팅 후 DB 연결 후 JPA 테이블 생성 (E + I 증명, K 직전까지)
 
 ### 🚨 위험 / 차단 요소
 

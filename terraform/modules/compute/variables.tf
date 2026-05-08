@@ -26,6 +26,12 @@ variable "worker_ebs_size_gb" {
   type        = number
 }
 
+variable "node_root_volume_size_gb" {
+  description = "K8s 노드 (master/worker) 의 root EBS 볼륨 크기. 8GB 는 containerd image 캐시로 가득 참 (이슈 H, 2026-05-10)."
+  type        = number
+  default     = 30
+}
+
 variable "az_a" {
   description = "AZ A (EBS 가 어느 AZ 에 살지 결정)"
   type        = string
