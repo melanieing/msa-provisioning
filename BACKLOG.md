@@ -11,8 +11,8 @@
 |---|---|
 | **마감일** | 2026-05-20 |
 | **남은 일수** | 9일 |
-| **현재 위치** | **2026-05-11 (스프린트 4일째) — Issue K + L + base-path 코드 fix 완료, 검증 직전**. 클러스터 꺼둔 상태에서 fix 후 두 레포 main push (msa-spring-boot 2 commits + msa-argocd-manifest 1 commit). 마지막 30분에 cluster-bootstrap 으로 일괄 검증. |
-| **진행률** | Phase A 100%, **Phase B 98%** (인프라 + GitOps 다 동작, K+L 코드 fix 완료, 검증 대기), Phase C 5%, Phase D 75% |
+| **현재 위치** | **2026-05-11 — K + L + base-path + A5 + A6 + C8 + D11 7개 fix 묶음 완료, 검증 직전**. 3 레포 main push 끝. 마지막 cluster-bootstrap 1회로 일괄 검증 — sync wave 가 자연스레 멈추는 위치에서 디버깅. |
+| **진행률** | Phase A 95% (A5/A6 완료, A4/A++ 잔여), **Phase B 98%** (검증 후 100%), Phase C 12% (C8 완료, C1~C7 잔여), Phase D 80% (D1+D11 완료, D2~D10/D12 잔여) |
 | **AWS 비용 사용량** | 2026-05-10 부트스트랩 ×4 후 destroy. 2026-05-11 은 코드 작업만, 검증 부트스트랩 1회 예정. |
 
 ### 다음 우선순위 (순서대로)
@@ -77,7 +77,14 @@
 
 ## ✅ 완료 (역순, 최근 → 옛날)
 
-### 2026-05-11 (스프린트 4일째 — K + L + base-path 코드 fix, 검증 대기)
+### 2026-05-11 (스프린트 4일째 — K + L + base-path + A5 + A6 + C8 + D11 묶음, 검증 대기)
+- ✅ **A5 — KMS CMK + EFS SSE 암호화** (msa-provisioning): storage 모듈에 KMS key + alias 추가. EFS 본체에 encrypted=true + kms_key_id. PDF §5.3 의 EBS+EFS+ECR 충족 (S3 는 D7 시 추가). outputs.tf 에 kms_key_arn 노출.
+- ✅ **A6 — VPC Endpoint S3 (gateway, 무료) + KMS (interface, ~38원/h × 2 AZ)** (msa-provisioning): network 모듈. Route Table 에 S3 endpoint entry 자동, KMS 는 private_dns_enabled 로 SDK 코드 변경 0. 새 SG 'vpc-endpoint-sg' (HTTPS 443 from VPC). PDF §5.1 충족.
+- ✅ **C8 — JWT secret → K8s Secret** (msa-spring-boot): values.yaml jwtSecret → templates/secret.yaml → deployment.yaml envFrom secretRef → Pod env JWT_SECRET → application.yaml ${JWT_SECRET} 매칭. ⚠️ 학습용 평문 (git commit), 운영급 wiring 갖춤. CLAUDE.md §6 위반 해소.
+- ✅ **D11 — Trivy GHA scan** (msa-spring-boot): build-and-push.yml 에 trivy-scan job. matrix 4 service 병렬, needs: build. aquasecurity/trivy-action@master + ECR 로그인 + image-ref 로 scan. 학습용 정책 (exit-code:0, severity:CRITICAL,HIGH).
+- ✅ Helm lint user-api-gateway 통과 + terraform validate 통과.
+
+### 2026-05-11 (스프린트 4일째 — K + L + base-path 코드 fix)
 - ✅ **이슈 K — Redis Cluster 연동 (코드 fix)**: 체크포인트 추측 검증. 실제 root cause 는 chart env `SPRING_REDIS_HOST` (Boot 2.x prefix) 가 Spring Boot 3.x 의 relaxed binding 에서 무시됨. `spring.data.redis.*` (Boot 3.x 표준) 로 prefix 변경 + cluster 모드 활성화를 위해 `SPRING_DATA_REDIS_CLUSTER_NODES` 단일 seed 노드 (`redis-leader.data.svc.cluster.local:6379`) 사용. Lettuce + Redisson 둘 다 자동으로 cluster 모드로 빈 생성 (Redisson Spring Boot starter 가 spring.data.redis.cluster.nodes 인식 → ClusterServersConfig). RedissonConfig 별도 bean 불필요. msa-spring-boot `charts/services/inventory-service/values.yaml`.
 - ✅ **이슈 L — cross-namespace Secret 자동화 (영구 fix)**: emberstack/reflector 도입. msa-argocd-manifest:
   - `platform/operators/reflector-operator.yaml` 신규 (helm chart 10.0.41, 2026-05-08 release, app+chart 동기 버전, sync-wave -20)
@@ -153,8 +160,8 @@
 | A2 | Argo CD 매니페스트 리포 생성 | ✅ 완료 | melanieing/msa-argocd-manifest |
 | A3 | Terraform variables.tf 변수화 | ✅ 완료 | 13개 변수, zero drift |
 | A4 | Terraform S3 backend + DynamoDB lock | ⏳ 미진행 | 팀 협업 / DR 신뢰성. 1인 학습 프로젝트라 우선순위 ↓ |
-| A5 | KMS CMK + EBS/EFS/S3 SSE 암호화 | ⏳ 미진행 | PDF 5.3절 명시. **Phase D 보안 작업 시 같이** |
-| A6 | VPC Endpoint (S3, KMS) | ⏳ 미진행 | PDF 5.1절. 이그레스 비용 절감 |
+| A5 | KMS CMK + EBS/EFS/S3 SSE 암호화 | ✅ 완료 (2026-05-11) | EBS (어제 H fix) + ECR (D1-a) + EFS (오늘 storage 모듈에 KMS key 추가). S3 는 D7 (정적 페이지) 작업 시 같은 패턴으로 추가 예정. |
+| A6 | VPC Endpoint (S3, KMS) | ✅ 완료 (2026-05-11) | network 모듈에 S3 gateway endpoint (무료) + KMS interface endpoint (~38원/h × 2 AZ) + 전용 SG 추가. private_dns_enabled 로 SDK 코드 변경 0. |
 | A7 | EC2 stop/start/bootstrap/teardown 스크립트 | ✅ 완료 | 5종 PowerShell 스크립트 |
 | A8 | Ansible argocd_namespace 변수 + URL fix | ✅ 완료 | 외부 레포 수정으로 사용자가 진행 |
 | A9 | **Spring Boot 3.3.0 → 3.5.14 업그레이드** | ✅ **완료** (2026-05-08) | + Cloud Gateway 4.1.9→4.3.0, multi-module bootJar 설정 정리, gradle wrapper 누락 fix |
@@ -205,7 +212,7 @@
 | C5 | notification-service 최소 구현 | ⏳ | 5번째 서비스 | Must (descope 시 단일 채널) |
 | C6 | IdempotentEventAspect 구현 | ⏳ | 중복 메시지 방지 | Should |
 | C7 | Saga 보상 로직 1개 (재고부족→주문취소) | ⏳ | 분산 트랜잭션 | Should |
-| C8 | JWT secret 등 → K8s Secret | ⏳ | 보안 | Must |
+| C8 | JWT secret 등 → K8s Secret | ✅ 완료 (2026-05-11) | 보안 | Must — user-api-gateway chart 에 secret.yaml + envFrom + application.yaml 의 hardcoded 제거. 학습용 평문 (values.yaml 에 들어감), 운영급 wiring 패턴 갖춤 → 향후 Sealed Secrets 로 source 만 교체. |
 
 ---
 
@@ -228,7 +235,7 @@
 | D8 | Postman + Newman E2E 시나리오 | ⏳ | Must |
 | D9 | Testcontainers 통합 테스트 1개 | ⏳ | Should |
 | D10 | Chaos 데모 (Pod 강제 종료) | ⏳ | Should |
-| D11 | Trivy 컨테이너 스캔 | ⏳ | Should |
+| D11 | Trivy 컨테이너 스캔 | ✅ 완료 (2026-05-11) | Should — build-and-push.yml 에 trivy-scan job 추가. matrix 4 service 병렬, needs: build. 학습용 정책 (exit-code 0, severity CRITICAL+HIGH only). |
 | D12 | 발표 자료 + README 갱신 + 데모 시나리오 | ⏳ | Must |
 
 ---

@@ -186,9 +186,10 @@
 | **Cross-namespace Secret 복제** | ✅ reflector 10.0.41 (2026-05-11) | CNPG `<cluster>-app` Secret + redis-secret 을 microservice ns 로 자동 복제 (Issue L) |
 | Redis 비밀번호 | ✅ K8s Secret + secretKeyRef (reflector 통해) | Sealed Secrets 또는 AWS Secrets Manager |
 | DB 비밀번호 | ✅ CNPG 자동생성 Secret + secretKeyRef (reflector 통해) | (위와 동일) |
-| JWT secret | hardcoded `application.yaml` | K8s Secret + envFrom (Phase C-1) |
-| EBS / EFS / S3 암호화 | ❌ 미적용 | KMS CMK SSE 적용 (PDF 5.3절) |
-| VPC Endpoint | ❌ 미적용 | S3, KMS (PDF 5.1절) |
+| **JWT secret** | ✅ chart secret.yaml + envFrom (C8, 2026-05-11) | values.yaml 의 jwtSecret 평문 → Sealed Secrets 로 source 만 교체 |
+| **EBS / EFS / ECR 암호화** | ✅ KMS CMK SSE 적용 (A5, 2026-05-11) | EBS (compute), EFS (storage), ECR (registry) 모두 적용. S3 는 D7 시 |
+| **VPC Endpoint** | ✅ S3 gateway + KMS interface (A6, 2026-05-11) | 추가 서비스 (ECR, STS, secretsmanager) 도 비용 효율 시 추가 |
+| **컨테이너 취약점 스캔** | ✅ Trivy GHA (D11, 2026-05-11) + ECR scan_on_push | 운영급은 exit-code:1 + severity:CRITICAL 로 push 차단 |
 
 ---
 
@@ -230,6 +231,7 @@
 
 | 일자 | 변경 |
 |---|---|
+| 2026-05-11 | A5 (KMS CMK + EFS SSE), A6 (VPC Endpoint S3 gateway + KMS interface), C8 (JWT K8s Secret), D11 (Trivy GHA scan) 4개 묶음 추가. |
 | 2026-05-11 | emberstack/reflector 10.0.41 추가 (Issue L). CNPG inheritedMetadata + redis-secret annotation 으로 cross-namespace Secret 자동 복제. |
 | 2026-05-08 | D1-d: GitHub Actions workflow (matrix + OIDC + ECR push + GHA layer cache). D1-a/b/c Terraform 모듈 (ECR + KMS + OIDC). |
 | 2026-05-08 | B-2b 4개 서비스 Dockerfile 추가 (멀티스테이지 + Spring Boot layered jar + non-root + healthcheck) |
