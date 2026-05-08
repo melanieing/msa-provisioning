@@ -11,13 +11,13 @@
 |---|---|
 | **마감일** | 2026-05-20 |
 | **남은 일수** | 9일 |
-| **현재 위치** | **D4 day — Issue K + L + base-path 코드 fix 완료, 검증 직전**. 클러스터 꺼둔 상태에서 fix 후 두 레포 main push (msa-spring-boot 2 commits + msa-argocd-manifest 1 commit). 마지막 30분에 cluster-bootstrap 으로 일괄 검증. |
+| **현재 위치** | **2026-05-11 (스프린트 4일째) — Issue K + L + base-path 코드 fix 완료, 검증 직전**. 클러스터 꺼둔 상태에서 fix 후 두 레포 main push (msa-spring-boot 2 commits + msa-argocd-manifest 1 commit). 마지막 30분에 cluster-bootstrap 으로 일괄 검증. |
 | **진행률** | Phase A 100%, **Phase B 98%** (인프라 + GitOps 다 동작, K+L 코드 fix 완료, 검증 대기), Phase C 5%, Phase D 75% |
-| **AWS 비용 사용량** | D3 day 부트스트랩 ×4 후 destroy. D4 day 는 코드 작업만, 검증 부트스트랩 1회 예정. |
+| **AWS 비용 사용량** | 2026-05-10 부트스트랩 ×4 후 destroy. 2026-05-11 은 코드 작업만, 검증 부트스트랩 1회 예정. |
 
 ### 다음 우선순위 (순서대로)
 
-1. **🟢 검증 부트스트랩 (D4 day 마지막 30분)** — 오늘 fix 한 K + L + base-path 일괄 검증. 기대 결과: ① inventory-service Pod 가 Redis Cluster 에 정상 연결 (`SPRING_DATA_REDIS_CLUSTER_NODES` 인식 + Lettuce/Redisson cluster 모드 활성), ② CNPG `<cluster>-app` Secret 과 redis-secret 이 reflector 에 의해 microservice ns 로 자동 복제 (수동 stopgap 불필요), ③ user-api-gateway 가 더 이상 ~2분 만에 kill 되지 않음 (actuator base-path /actuator/* 로 통일).
+1. **🟢 검증 부트스트랩 (오늘 마지막 30분)** — 오늘 fix 한 K + L + base-path 일괄 검증. 기대 결과: ① inventory-service Pod 가 Redis Cluster 에 정상 연결 (`SPRING_DATA_REDIS_CLUSTER_NODES` 인식 + Lettuce/Redisson cluster 모드 활성), ② CNPG `<cluster>-app` Secret 과 redis-secret 이 reflector 에 의해 microservice ns 로 자동 복제 (수동 stopgap 불필요), ③ user-api-gateway 가 더 이상 ~2분 만에 kill 되지 않음 (actuator base-path /actuator/* 로 통일).
 2. **[Phase C-1]** JWT secret K8s Secret 으로 옮기기 (DB + Redis 비밀번호는 Issue I/L 로 해결됨).
 3. **[Phase D-2]** OpenTelemetry SDK 5개 서비스 통합.
 
@@ -77,7 +77,7 @@
 
 ## ✅ 완료 (역순, 최근 → 옛날)
 
-### 2026-05-11 (D4 day — K + L + base-path 코드 fix, 검증 대기)
+### 2026-05-11 (스프린트 4일째 — K + L + base-path 코드 fix, 검증 대기)
 - ✅ **이슈 K — Redis Cluster 연동 (코드 fix)**: 체크포인트 추측 검증. 실제 root cause 는 chart env `SPRING_REDIS_HOST` (Boot 2.x prefix) 가 Spring Boot 3.x 의 relaxed binding 에서 무시됨. `spring.data.redis.*` (Boot 3.x 표준) 로 prefix 변경 + cluster 모드 활성화를 위해 `SPRING_DATA_REDIS_CLUSTER_NODES` 단일 seed 노드 (`redis-leader.data.svc.cluster.local:6379`) 사용. Lettuce + Redisson 둘 다 자동으로 cluster 모드로 빈 생성 (Redisson Spring Boot starter 가 spring.data.redis.cluster.nodes 인식 → ClusterServersConfig). RedissonConfig 별도 bean 불필요. msa-spring-boot `charts/services/inventory-service/values.yaml`.
 - ✅ **이슈 L — cross-namespace Secret 자동화 (영구 fix)**: emberstack/reflector 도입. msa-argocd-manifest:
   - `platform/operators/reflector-operator.yaml` 신규 (helm chart 10.0.41, 2026-05-08 release, app+chart 동기 버전, sync-wave -20)
