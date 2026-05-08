@@ -1,6 +1,6 @@
 # Market Service MSA — 기술 스택 & 버전
 
-> **마지막 검증일**: 2026-05-08
+> **마지막 검증일**: 2026-05-11
 > 버전은 모두 GitHub releases API / ArtifactHub 직접 조회로 확인됨.
 
 ---
@@ -81,6 +81,7 @@
 | **kube-prometheus-stack** | **84.5.0** | ✅ 적용 | 2026-05-01 | Prometheus + Grafana + Alertmanager 묶음 |
 | **Loki** | **7.0.0** (app: 3.6.7) | ✅ 적용 | — | grafana/loki helm chart |
 | **OpenTelemetry Collector** | **0.153.0** | ✅ 적용 | 2026-04-30 | OTLP 게이트웨이 |
+| **emberstack/reflector** | **10.0.41** | ✅ 적용 (2026-05-11) | 2026-05-08 | cross-namespace Secret/ConfigMap 자동 복제 (Issue L) |
 
 ---
 
@@ -182,8 +183,10 @@
 
 | 항목 | 현재 상태 | 향후 |
 |---|---|---|
-| Redis 비밀번호 | 평문 K8s Secret (학습용) | Sealed Secrets 또는 AWS Secrets Manager |
-| JWT secret | hardcoded `application.yaml` | K8s Secret + envFrom |
+| **Cross-namespace Secret 복제** | ✅ reflector 10.0.41 (2026-05-11) | CNPG `<cluster>-app` Secret + redis-secret 을 microservice ns 로 자동 복제 (Issue L) |
+| Redis 비밀번호 | ✅ K8s Secret + secretKeyRef (reflector 통해) | Sealed Secrets 또는 AWS Secrets Manager |
+| DB 비밀번호 | ✅ CNPG 자동생성 Secret + secretKeyRef (reflector 통해) | (위와 동일) |
+| JWT secret | hardcoded `application.yaml` | K8s Secret + envFrom (Phase C-1) |
 | EBS / EFS / S3 암호화 | ❌ 미적용 | KMS CMK SSE 적용 (PDF 5.3절) |
 | VPC Endpoint | ❌ 미적용 | S3, KMS (PDF 5.1절) |
 
@@ -227,6 +230,7 @@
 
 | 일자 | 변경 |
 |---|---|
+| 2026-05-11 | emberstack/reflector 10.0.41 추가 (Issue L). CNPG inheritedMetadata + redis-secret annotation 으로 cross-namespace Secret 자동 복제. |
 | 2026-05-08 | D1-d: GitHub Actions workflow (matrix + OIDC + ECR push + GHA layer cache). D1-a/b/c Terraform 모듈 (ECR + KMS + OIDC). |
 | 2026-05-08 | B-2b 4개 서비스 Dockerfile 추가 (멀티스테이지 + Spring Boot layered jar + non-root + healthcheck) |
 | 2026-05-08 | Spring Boot 3.3.0 → 3.5.14 업그레이드. Cloud Gateway 4.1.9 → 4.3.0. Gradle wrapper(8.14.4) 누락 fix |

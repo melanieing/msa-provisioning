@@ -1,6 +1,6 @@
 # Market Service MSA — 백로그 & 진행 상황
 
-> **마지막 갱신**: 2026-05-10
+> **마지막 갱신**: 2026-05-11
 > 단일 진실 원천(SSOT). 작업 시작/완료 시 여기 갱신.
 
 ---
@@ -10,18 +10,16 @@
 | 항목 | 값 |
 |---|---|
 | **마감일** | 2026-05-20 |
-| **남은 일수** | 11일 |
-| **현재 위치** | **D2 day 마무리 — 11개 이슈 진단/해결**. 11 platform/data Application 모두 Healthy/Synced + 10 PVC Bound + 6 nodes Ready. microservice 4개는 K (Redis Cluster 연동) + L (cross-namespace secret 자동화) 만 남음 — 다음 세션 Phase C 영역. 클러스터 destroy 예정. |
-| **진행률** | Phase A 100%, **Phase B 95%** (인프라 + GitOps 다 동작, microservice 코드 영역 잔여), Phase C 5%, Phase D 75% |
-| **AWS 비용 사용량** | 오늘 부트스트랩 ×4 (terraform churn 디버깅 + H fix). 이제 destroy. |
+| **남은 일수** | 9일 |
+| **현재 위치** | **D4 day — Issue K + L + base-path 코드 fix 완료, 검증 직전**. 클러스터 꺼둔 상태에서 fix 후 두 레포 main push (msa-spring-boot 2 commits + msa-argocd-manifest 1 commit). 마지막 30분에 cluster-bootstrap 으로 일괄 검증. |
+| **진행률** | Phase A 100%, **Phase B 98%** (인프라 + GitOps 다 동작, K+L 코드 fix 완료, 검증 대기), Phase C 5%, Phase D 75% |
+| **AWS 비용 사용량** | D3 day 부트스트랩 ×4 후 destroy. D4 day 는 코드 작업만, 검증 부트스트랩 1회 예정. |
 
 ### 다음 우선순위 (순서대로)
 
-1. **🔴 Issue K — Redis Cluster 연동** (오늘 발견, 미fix). 마이크로서비스가 Redis 를 `localhost:7005` 로 연결 시도. 원인: ① Spring Boot 3.x 표준은 `spring.data.redis.*` 인데 chart 가 `SPRING_REDIS_*` (2.x legacy) 사용, ② Redisson 라이브러리는 cluster 모드 별도 설정 필요 (cluster nodes URL 명시). chart 수정 + Spring Boot application.yml 수정 + image 재빌드 가능성. **다음 세션 Phase C 본격 작업**.
-2. **🔴 Issue L — cross-namespace Secret 자동화** (오늘 stopgap 만 함). CNPG 가 만든 `<cluster>-app` Secret 은 `data` namespace 에 살아있고, microservice Pod 는 자기 namespace. K8s 의 `secretKeyRef` 는 cross-namespace 안 됨. **stopgap**: 수동 `kubectl get -n data | kubectl apply -n <svc>` (휘발성 — destroy 시 사라짐). **영구 fix 옵션**: (a) emberstack/reflector annotation 기반 복제 (가장 cloud-native), (b) ansible post-bootstrap task 로 5개 secret copy.
-3. **🟡 user-api-gateway graceful shutdown** — 정상 부팅 (~37s) 후 ~2분 만에 K8s 가 kill. 가능성: liveness probe 실패 (J fix 후에도 지속 시), 또는 OOMKilled (Burstable QoS, limit 512Mi 작음). 다음 세션 진단.
-4. **[Phase C-1]** JWT secret K8s Secret 으로 옮기기 (DB 비밀번호는 Issue I/L 으로 일부 해결됨).
-5. **[Phase D-2]** OpenTelemetry SDK 5개 서비스 통합.
+1. **🟢 검증 부트스트랩 (D4 day 마지막 30분)** — 오늘 fix 한 K + L + base-path 일괄 검증. 기대 결과: ① inventory-service Pod 가 Redis Cluster 에 정상 연결 (`SPRING_DATA_REDIS_CLUSTER_NODES` 인식 + Lettuce/Redisson cluster 모드 활성), ② CNPG `<cluster>-app` Secret 과 redis-secret 이 reflector 에 의해 microservice ns 로 자동 복제 (수동 stopgap 불필요), ③ user-api-gateway 가 더 이상 ~2분 만에 kill 되지 않음 (actuator base-path /actuator/* 로 통일).
+2. **[Phase C-1]** JWT secret K8s Secret 으로 옮기기 (DB + Redis 비밀번호는 Issue I/L 로 해결됨).
+3. **[Phase D-2]** OpenTelemetry SDK 5개 서비스 통합.
 
 ### ✅ 오늘 검증 완료 (어제 fix 의 결과)
 
@@ -78,6 +76,19 @@
 ---
 
 ## ✅ 완료 (역순, 최근 → 옛날)
+
+### 2026-05-11 (D4 day — K + L + base-path 코드 fix, 검증 대기)
+- ✅ **이슈 K — Redis Cluster 연동 (코드 fix)**: 체크포인트 추측 검증. 실제 root cause 는 chart env `SPRING_REDIS_HOST` (Boot 2.x prefix) 가 Spring Boot 3.x 의 relaxed binding 에서 무시됨. `spring.data.redis.*` (Boot 3.x 표준) 로 prefix 변경 + cluster 모드 활성화를 위해 `SPRING_DATA_REDIS_CLUSTER_NODES` 단일 seed 노드 (`redis-leader.data.svc.cluster.local:6379`) 사용. Lettuce + Redisson 둘 다 자동으로 cluster 모드로 빈 생성 (Redisson Spring Boot starter 가 spring.data.redis.cluster.nodes 인식 → ClusterServersConfig). RedissonConfig 별도 bean 불필요. msa-spring-boot `charts/services/inventory-service/values.yaml`.
+- ✅ **이슈 L — cross-namespace Secret 자동화 (영구 fix)**: emberstack/reflector 도입. msa-argocd-manifest:
+  - `platform/operators/reflector-operator.yaml` 신규 (helm chart 10.0.41, 2026-05-08 release, app+chart 동기 버전, sync-wave -20)
+  - 3 CNPG Cluster (inventory/order/product-db) 의 `spec.inheritedMetadata.annotations` 로 reflector 4종 annotation 상속 → `<cluster>-app` Secret 이 microservice ns 로 자동 복제
+  - redis-secret 에도 동일 annotation 직접 추가 (inventory-service ns 로만 복제)
+  msa-spring-boot:
+  - inventory-service values.yaml: 평문 password 제거 + `redisSecretName: redis-secret`
+  - 4 chart 의 deployment.yaml: secretKeyRef env block 을 `or dbSecretName redisSecretName` 으로 확장. 일관성 위해 4개 모두 동일 templates 유지.
+- ✅ **🐛 user-api-gateway graceful shutdown 진단 + fix (side-effect of K 디버깅)**: root cause 발견 = 4개 application.yaml 의 비표준 `management.endpoints.web.base-path: /` + `path-mapping.health: healthz`. 실제 actuator endpoint 는 `/healthz/*` 인데 chart probe 가 `/actuator/health/liveness` 호출 → 404 → liveness 3 fail → kill (37s 부팅 + 90s = 정확히 일치). 다른 backend 들은 DB/Redis 연결 실패로 부팅 단계에서 죽어 가시화 안 됐을 뿐 동일 문제. **fix**: 4 application.yaml 에서 비표준 base-path 제거 (default `/actuator` 복원) + `probes.enabled: true` 명시. Dockerfile HEALTHCHECK 의 `/actuator/health` 와도 일관성 회복.
+- 📦 두 레포 push 완료 (msa-spring-boot 2 commits + msa-argocd-manifest 1 commit). GHA matrix 가 4 services 자동 ECR 빌드.
+- ⏳ **검증 대기**: 클러스터 꺼둔 상태라 마지막 30분 cluster-bootstrap 으로 K + L + base-path 일괄 확인.
 
 ### 2026-05-10 (오후 — 부트스트랩 검증)
 - ✅ **🎉 어제 fix 한 3개 sync 이슈 cluster-bootstrap 으로 검증 완료** — A (platform-of-apps 분리 + recurse:false), B (apps Namespace whitelist), C (Helm chart group/version empty) 모두 의도대로 동작. ArgoCD UI 에서 platform-operators-app / platform-data-app / platform-observability-app 모두 Healthy/Synced. 4 microservice Application 모두 Synced (Pod 단계 진행 중).
