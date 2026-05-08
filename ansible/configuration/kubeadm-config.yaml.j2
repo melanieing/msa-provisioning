@@ -3,33 +3,18 @@
 {# master-init.yaml 이 변수 치환 후 /etc/kubernetes/kubeadm-config.yaml 로 #}
 {# 저장하고, 'kubeadm init --config /etc/kubernetes/kubeadm-config.yaml'   #}
 {# 형태로 사용.                                                            #}
-{#                                                                         #}
-{# 변수 출처:                                                              #}
-{#   - nlb_dns_name : inventory.ini 의 [all:vars]                          #}
-{#   - ansible_default_ipv4.address : Ansible 자동 수집 (이 노드의 IP)   #}
 {# ────────────────────────────────────────────────────────────────────── #}
 apiVersion: kubeadm.k8s.io/v1beta3
 kind: ClusterConfiguration
-kubernetesVersion: v1.35.4                  # 2026-04-15 release. k8s-pkg-install 의 v1.35 와 일치
-
-# 컨트롤플레인 진입점 = NLB DNS 주소.
-# kubectl/kubeadm 클라이언트가 이 주소로 접속 → NLB 가 살아있는 master 로 분기.
-# 한 master 가 죽어도 다른 master 가 응답해서 HA 구성.
+kubernetesVersion: v1.35.4
 controlPlaneEndpoint: "{{ nlb_dns_name }}:6443"
-
 networking:
-  # Pod 한테 줄 IP 대역. Calico 기본값과 일치시킴.
-  # VPC CIDR (10.0.0.0/16) 와 겹치면 안 됨 → 192.168.0.0/16 사용.
   podSubnet: "192.168.0.0/16"
-
-# 인증서에 포함될 추가 SAN (Subject Alternative Names).
-# kubectl 이 NLB DNS 또는 master IP 로 접속할 때 인증서가 그 이름을 인정해야 함.
-certSANs:
-    - "{{ nlb_dns_name }}"                  {# NLB DNS #}
-    - "{{ ansible_default_ipv4.address }}"  {# 이 master 노드의 사설 IP #}
+apiServer:
+  certSANs:
+    - "{{ nlb_dns_name }}"
+    - "{{ ansible_default_ipv4.address }}"
 ---
 apiVersion: kubelet.config.k8s.io/v1beta1
 kind: KubeletConfiguration
-# kubelet 의 cgroup 드라이버를 systemd 로 설정.
-# containerd 의 SystemdCgroup=true 와 반드시 일치해야 함 (containerd-setup.yaml 참고).
 cgroupDriver: systemd

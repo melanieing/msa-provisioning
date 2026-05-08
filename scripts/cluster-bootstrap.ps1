@@ -13,7 +13,16 @@ $TerraformDir = Join-Path $ScriptDir "..\terraform"
 $AnsibleDir = Join-Path $ScriptDir "..\ansible"
 
 # WSL 에서 보는 ansible 디렉토리 경로 (예: /mnt/c/Users/melan/...)
-$AnsibleDirWsl = $AnsibleDir -replace '\\', '/' -replace '^([A-Z]):', { '/mnt/' + $args[0].Groups[1].Value.ToLower() }
+# - Resolve-Path 로 '..' 정리
+# - 'C:\foo\bar' → 'c/foo/bar' → '/mnt/c/foo/bar'
+# (PS 5.1 호환 — script block 형식의 -replace 는 PS 7+ 전용이라 못 씀)
+$AnsibleDirAbs = (Resolve-Path $AnsibleDir).Path
+$AnsibleDirSlash = $AnsibleDirAbs -replace '\\', '/'
+if ($AnsibleDirSlash -match '^([A-Z]):(.*)') {
+    $AnsibleDirWsl = "/mnt/$($Matches[1].ToLower())$($Matches[2])"
+} else {
+    $AnsibleDirWsl = $AnsibleDirSlash
+}
 
 Write-Host ""
 Write-Host "============================================================" -ForegroundColor Cyan
