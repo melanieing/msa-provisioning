@@ -17,8 +17,9 @@
 
 ### 다음 우선순위 (순서대로)
 
-1. **🟡 Issue D fix (in progress)** — `_kafka/*.yaml` 의 `kafka.strimzi.io/v1beta2` → `v1` 으로. push 후 ArgoCD 가 재 sync.
-2. **🔴 Issue E — ECR pull 인증** — K8s 1.27+ 부터 kubelet 내장 ECR auth 제거됐는데 `ecr-credential-provider` 플러그인 미설치. 해결 옵션: (a) Ansible 로 노드별 플러그인 설치 (정공법, 별도 playbook), (b) imagePullSecret 수동 (12h 만료, stopgap), (c) ECR 토큰 자동 갱신 CronJob.
+1. **✅ Issue D fix 완료** — kafka v1 으로 변경, push 됨.
+2. **✅ Issue F fix 완료** — KafkaTopic underscore → metadata.name 은 hyphen, spec.topicName 으로 PDF 명세 보존.
+3. **🔴 Issue E — ECR pull 인증** (검증 완료) — K8s 1.27+ 부터 kubelet 내장 ECR auth 제거됐는데 `ecr-credential-provider` 플러그인 미설치. 해결 옵션: (a) Ansible 로 노드별 플러그인 설치 (정공법, 별도 playbook), (b) imagePullSecret 수동 (12h 만료, stopgap), (c) ECR 토큰 자동 갱신 CronJob.
 3. **마이크로서비스 Pod Healthy 확인** — D + E fix 후 user-api-gateway / product / order / inventory 4개 Pod 가 실제 Running 인지.
 4. **[Phase C-1]** JWT secret + DB 비밀번호 K8s Secret 으로 옮기기.
 
@@ -59,9 +60,10 @@
 
 ### 2026-05-10 (오후 — 부트스트랩 검증)
 - ✅ **🎉 어제 fix 한 3개 sync 이슈 cluster-bootstrap 으로 검증 완료** — A (platform-of-apps 분리 + recurse:false), B (apps Namespace whitelist), C (Helm chart group/version empty) 모두 의도대로 동작. ArgoCD UI 에서 platform-operators-app / platform-data-app / platform-observability-app 모두 Healthy/Synced. 4 microservice Application 모두 Synced (Pod 단계 진행 중).
-- 🐛 **새 이슈 2개 발견** (어제와 무관):
-  - **이슈 D — Strimzi 1.0.0 의 v1beta2 제거**: `kafka.strimzi.io/v1beta2` 가 더 이상 cluster 에 등록 안 됨 (메이저 업그레이드 영향). `_kafka/kafka-cluster.yaml` (3곳) + `_kafka/topics.yaml` (5곳) 의 apiVersion 을 `v1` 로 변경. **fix 완료, push 후 ArgoCD 재sync 대기**.
-  - **이슈 E — ECR pull "no basic auth credentials"**: K8s 1.27 부터 kubelet 내장 ECR 인증 제거. K8s 1.35 는 `ecr-credential-provider` 플러그인 필요. Ansible playbook 작성 (다음 세션) 또는 stopgap 으로 imagePullSecret. **미fix**.
+- 🐛 **새 이슈 3개 발견** (어제와 무관):
+  - **이슈 D — Strimzi 1.0.0 의 v1beta2 제거**: `kafka.strimzi.io/v1beta2` 가 더 이상 cluster 에 등록 안 됨 (메이저 업그레이드 영향). `_kafka/kafka-cluster.yaml` (3곳) + `_kafka/topics.yaml` (5곳) 의 apiVersion 을 `v1` 로 변경. **fix 완료**.
+  - **이슈 F — KafkaTopic 의 underscore RFC 1123 위반**: D fix 후 더 깊은 validation 단계에서 발견. `metadata.name: order.inventory_reserved` 의 underscore 가 K8s 의 RFC 1123 (lowercase, `[a-z0-9.-]` 만) 위반. **fix 완료** — `metadata.name: order.inventory-reserved` (hyphen) + `spec.topicName: order.inventory_reserved` (PDF 명세 준수). KafkaTopic CRD 는 K8s 이름과 실제 Kafka 토픽명을 분리 가능.
+  - **이슈 E (검증 완료) — ECR pull "no basic auth credentials"**: 사용자 가설 (ECR 이미지 부재) 검증을 위해 GitHub Actions 으로 이미지 push 후 Pod 재생성 → **여전히 같은 에러** → 인증 문제로 확정. K8s 1.27 부터 kubelet 내장 ECR 인증 제거됨. **K8s 1.35 는 `ecr-credential-provider` 플러그인 필요**. Ansible playbook 작성 (다음 세션) 또는 stopgap 으로 imagePullSecret + cron 갱신. **미fix — 다음 세션 핵심 작업**.
 - 부트스트랩 도중 발견된 ssh-agent / Windows 경로 이슈 (어제 fix 한 것의 재발) → terraform.tfvars 에 다시 들어간 ssh_private_key_path 라인 영구 제거. 이번엔 두 번째라 영구 fix 가 필요한 듯 (terraform.tfvars.example 나 README 안내 갱신 검토).
 - 두 번째 terraform apply 시 15+15 churn 발생 (EC2/EIP 일부 재생성). 원인 미확인 — 비용 영향 미미. 다음 세션에서 추적 가능.
 
