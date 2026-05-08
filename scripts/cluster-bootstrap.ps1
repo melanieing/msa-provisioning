@@ -1,4 +1,4 @@
-# ─────────────────────────────────────────────────────────────────────────
+﻿# ─────────────────────────────────────────────────────────────────────────
 # cluster-bootstrap.ps1
 # ─────────────────────────────────────────────────────────────────────────
 # AWS 인프라 + K8s 클러스터를 0 상태에서 완전히 처음부터 띄움.
@@ -116,7 +116,7 @@ if ($NativeAnsible) {
         Write-Host ""
         Write-Host "  Option 1 (recommended): WSL Ubuntu" -ForegroundColor Yellow
         Write-Host "    wsl"
-        Write-Host "    sudo apt update && sudo apt install -y ansible"
+        Write-Host "    sudo apt update; sudo apt install -y ansible"
         Write-Host "    exit"
         Write-Host ""
         Write-Host "  Option 2: pip" -ForegroundColor Yellow
@@ -133,7 +133,10 @@ if ($NativeAnsible) {
     }
 
     Write-Host "      Running via WSL..." -ForegroundColor Cyan
-    wsl -- bash -c "cd '$AnsibleDirWsl' && ansible-playbook -i inventory.ini main.yaml"
+    # PS 5.1 의 parser 가 string 안의 '&&' 도 chain operator 로 잘못 잡지 않도록
+    # bash 명령을 변수에 미리 담아서 전달. bash 는 변수 안의 '&&' 를 정상 해석.
+    $BashCmd = "cd '$AnsibleDirWsl' && ansible-playbook -i inventory.ini main.yaml"
+    wsl -- bash -c $BashCmd
     if ($LASTEXITCODE -ne 0) {
         throw "ansible-playbook failed."
     }
