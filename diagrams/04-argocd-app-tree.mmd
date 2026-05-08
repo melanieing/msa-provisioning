@@ -1,0 +1,63 @@
+---
+title: 4. Argo CD Application Tree (★ 2026-05-10 sync 이슈 fix 후 구조)
+config:
+  flowchart:
+    defaultRenderer: elk
+---
+flowchart TB
+    ROOT["root-app<br/><i>Ansible 이 마지막에 kubectl apply</i><br/>watches: msa-argocd-manifest/bootstrap/"]
+
+    PROJ["projects-app<br/>wave -100"]
+    PRJ_PLAT["platform<br/>(AppProject)"]
+    PRJ_APPS["apps<br/>(AppProject)<br/>★ Namespace whitelist"]
+
+    OPS["platform-operators-app<br/>★ NEW · wave -50<br/>recurse:false"]
+    OPS_CNPG["cnpg-operator<br/>Helm 0.28.0<br/>wave -20"]
+    OPS_STR["strimzi-operator<br/>Helm 1.0.0<br/>wave -20"]
+    OPS_ROP["redis-operator<br/>Helm 0.24.0<br/>wave -20"]
+
+    DATA["platform-data-app<br/>★ NEW · wave -40<br/>★ recurse:false (핵심 fix)"]
+    DATA_PG["postgres-clusters<br/>5 Cluster CR<br/>wave -10"]
+    DATA_KF["kafka-cluster<br/>Kafka + 3 NodePool<br/>+ 5 KafkaTopic<br/>wave -10"]
+    DATA_RD["redis-cluster<br/>RedisCluster + Secret<br/>wave -10"]
+
+    OBS["platform-observability-app<br/>★ NEW · wave -30<br/>recurse:false"]
+    OBS_PROM["prometheus-stack<br/>kube-prometheus-stack 84.5.0<br/>wave 0"]
+    OBS_LOKI["loki-stack<br/>Loki 7.0.0<br/>wave 0"]
+    OBS_OTEL["otel-collector<br/>OTel 0.153.0<br/>wave 5"]
+
+    APPS["microservices ApplicationSet<br/>wave 0<br/>Git Generator → charts/services/*"]
+    APP_GW["user-api-gateway<br/>wave 10"]
+    APP_PS["product-service<br/>wave 10"]
+    APP_OS["order-service<br/>wave 10"]
+    APP_IS["inventory-service<br/>wave 10"]
+
+    ROOT --> PROJ
+    ROOT --> OPS
+    ROOT --> DATA
+    ROOT --> OBS
+    ROOT --> APPS
+
+    PROJ --> PRJ_PLAT & PRJ_APPS
+    OPS --> OPS_CNPG & OPS_STR & OPS_ROP
+    DATA --> DATA_PG & DATA_KF & DATA_RD
+    OBS --> OBS_PROM & OBS_LOKI & OBS_OTEL
+    APPS --> APP_GW & APP_PS & APP_OS & APP_IS
+
+    classDef root fill:#fff,stroke:#000,stroke-width:3px,color:#000
+    classDef wave100 fill:#e8eaf6,stroke:#1a237e,stroke-width:2px,color:#000
+    classDef wave50 fill:#fff3e0,stroke:#e65100,stroke-width:2px,color:#000
+    classDef wave40 fill:#f3e5f5,stroke:#4a148c,stroke-width:2px,color:#000
+    classDef wave30 fill:#e0f2f1,stroke:#004d40,stroke-width:2px,color:#000
+    classDef wave0 fill:#fce4ec,stroke:#880e4f,stroke-width:2px,color:#000
+    classDef child fill:#fafafa,stroke:#616161,stroke-width:1px,color:#000
+    classDef new stroke-dasharray: 5 5,stroke-width:3px
+
+    class ROOT root
+    class PROJ wave100
+    class OPS,OPS_CNPG,OPS_STR,OPS_ROP wave50
+    class DATA,DATA_PG,DATA_KF,DATA_RD wave40
+    class OBS,OBS_PROM,OBS_LOKI,OBS_OTEL wave30
+    class APPS,APP_GW,APP_PS,APP_OS,APP_IS wave0
+    class PRJ_PLAT,PRJ_APPS child
+    class OPS,DATA,OBS new

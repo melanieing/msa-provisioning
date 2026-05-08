@@ -1,0 +1,53 @@
+---
+title: 1. GitOps 흐름 — 3 레포 ↔ AWS / K8s 클러스터
+config:
+  flowchart:
+    defaultRenderer: elk
+---
+flowchart LR
+    DEV(["👤 개발자<br/>melanieing"])
+
+    subgraph GIT["📦 3 Git Repositories"]
+        direction TB
+        CODE["msa-spring-boot<br/><i>Kotlin/Spring Boot 멀티모듈</i><br/>4 services + Helm charts<br/>charts/services/*"]
+        MFST["msa-argocd-manifest<br/><i>Argo CD 매니페스트 SSOT</i><br/>bootstrap/ projects/ platform/"]
+        INFRA["msa-provisioning<br/><i>Terraform + Ansible</i><br/>BACKLOG · STACK · CLAUDE"]
+    end
+
+    subgraph AWS["☁️ AWS"]
+        ECR[("ECR ×4 repos<br/>(KMS-encrypted)")]
+        VPC["VPC + EC2 ×8<br/>NLB · NAT · EFS · KMS"]
+    end
+
+    subgraph K8S["⚓ Kubernetes 1.35 HA"]
+        ARGO["Argo CD<br/>controller + UI"]
+        ROOT["root-app<br/>watches bootstrap/"]
+        BOOT["bootstrap/ 5 children<br/>━━━━━━━━━━━━━<br/>projects-app (-100)<br/>platform-operators-app (-50)<br/>platform-data-app (-40)<br/>platform-observability-app (-30)<br/>microservices ApplicationSet (0)"]
+        WORKLOAD["Workloads<br/>━━━━━━━━━━<br/>3 operators + 5 PG + Kafka<br/>+ Redis + Obs stack<br/>+ 4 microservices"]
+    end
+
+    DEV -->|git push| CODE
+    DEV -->|git push| MFST
+    DEV -->|git push| INFRA
+
+    CODE -.->|GitHub Actions<br/>matrix×4 + OIDC| ECR
+    INFRA -->|① terraform apply| VPC
+    INFRA -->|② ansible-playbook| K8S
+    INFRA -->|③ kubectl apply<br/>argocd-install| ARGO
+    INFRA -->|④ kubectl apply<br/>root-app ★ 마지막 수동| ROOT
+
+    MFST -.->|HEAD watch| ROOT
+    ROOT --> BOOT
+    BOOT --> WORKLOAD
+    CODE -.->|ApplicationSet<br/>Git Generator| WORKLOAD
+    ECR -.->|docker pull| WORKLOAD
+
+    classDef repo fill:#e8f0fe,stroke:#1a73e8,stroke-width:2px,color:#1a73e8
+    classDef aws fill:#fef3e7,stroke:#ff9900,stroke-width:2px,color:#7a4400
+    classDef k8s fill:#e6f4ea,stroke:#137333,stroke-width:2px,color:#0d652d
+    classDef dev fill:#fce8e6,stroke:#c5221f,stroke-width:2px,color:#8a1611
+
+    class CODE,MFST,INFRA repo
+    class ECR,VPC aws
+    class ARGO,ROOT,BOOT,WORKLOAD k8s
+    class DEV dev

@@ -1,0 +1,118 @@
+---
+title: 2. AWS 인프라 레이아웃 — VPC 10.0.0.0/16 (ap-northeast-2)
+config:
+  flowchart:
+    defaultRenderer: elk
+---
+flowchart TB
+    %% ─── 위 (VPC 외부에서 들어오는 entity) — 중앙 정렬 ─────────
+    subgraph TOP[" "]
+        direction LR
+        USER([👤 운영자<br/>ssh / kubectl])
+        INTERNET([🌐 Internet])
+    end
+
+    %% ─── VPC ─────────────────────────────────────────────────────
+    subgraph VPC["VPC 10.0.0.0/16"]
+        direction TB
+        IGW["Internet Gateway"]
+
+        %% NLB + EFS 를 AZ 박스 위 중앙
+        subgraph NLBEFS[" "]
+            direction LR
+            NLB["NLB (internet-facing)<br/>━━━━━━━━━━━━━━<br/>K8s API :6443<br/>L4 TCP — mTLS passthrough<br/>(ALB 는 mTLS 깨므로 NLB 사용)"]
+            EFS[("EFS<br/>━━━━━━━<br/>mount target × 2<br/>(AZ-a, AZ-b)<br/>모든 EC2 mount 가능")]
+        end
+
+        subgraph AZS[" "]
+            direction LR
+            subgraph AZA["🟦 ap-northeast-2a"]
+                direction TB
+                subgraph PUBA["Public Subnet 10.0.1.0/24"]
+                    direction LR
+                    BASTA["bastion-a<br/>t3.nano"]
+                    NATA["NAT-a<br/>(egress→IGW→Internet)"]
+                end
+                subgraph PRIA["Private Subnet 10.0.2.0/24"]
+                    direction LR
+                    M1["master-1<br/>t3.medium"]
+                    M2["master-2<br/>t3.medium"]
+                    W1["worker-1<br/>t3.medium"]
+                end
+            end
+
+            subgraph AZB["🟪 ap-northeast-2b"]
+                direction TB
+                subgraph PUBB["Public Subnet 10.0.3.0/24"]
+                    direction LR
+                    BASTB["bastion-b<br/>t3.nano"]
+                    NATB["NAT-b<br/>(egress→IGW→Internet)"]
+                end
+                subgraph PRIB["Private Subnet 10.0.4.0/24"]
+                    direction LR
+                    M3["master-3<br/>t3.medium"]
+                    W2["worker-2<br/>t3.medium"]
+                    W3["worker-3<br/>t3.medium"]
+                end
+            end
+        end
+
+        SG["🛡 Security Group 자기참조 ALL<br/>━━━━━━━━━━━━━━━━━━━<br/>같은 SG 멤버끼리 모든 IP 프로토콜 허용<br/>(Calico IP-in-IP / worker ↔ master 통신)"]
+    end
+
+    %% ─── AWS Account-level (VPC 외부, 아래) ─────────────────────
+    subgraph EXT["AWS Account-level (VPC 외부)"]
+        direction LR
+        OIDC["GitHub OIDC<br/>provider"]
+        ECR[("ECR ×4 repos<br/>KMS encrypted")]
+        IAM["IAM Role<br/>ktcloud-cluster-node-role<br/>(LBC + ECR pull policies)"]
+    end
+
+    %% ─── 트래픽 흐름 (단순화: NAT egress 는 IGW 생략하고 직접 Internet) ──
+
+    %% Internet 인입
+    INTERNET --> IGW
+    IGW --> NLB
+
+    %% kubectl / ssh 진입
+    USER -.->|kubectl :6443| NLB
+    USER -.->|ssh :22| BASTA
+    USER -.->|ssh :22| BASTB
+    BASTA -.->|tunnel| M1
+    BASTB -.->|tunnel| M3
+
+    %% NLB → master ×3 (K8s API HA)
+    NLB -->|target group| M1
+    NLB -->|target group| M2
+    NLB -->|target group| M3
+
+    %% NAT egress: PRI → NAT (그 다음 NAT → IGW → Internet 은 NAT 라벨로 표기)
+    PRIA -->|egress| NATA
+    PRIB -->|egress| NATB
+
+    %% EFS mount (subnet 레벨 — AZ 의 모든 EC2 가 mount 가능)
+    EFS -.->|NFS mount<br/>via mount target| PRIA
+    EFS -.->|NFS mount<br/>via mount target| PRIB
+
+    %% AWS Account-level
+    OIDC -->|GHA assume-role + push| ECR
+    VPC -.->|6 K8s nodes: pull image + IAM InstanceProfile attach| EXT
+
+    %% ─── 스타일 ──────────────────────────────────────────────────
+    classDef public fill:#e3f2fd,stroke:#1565c0,stroke-width:2px
+    classDef private fill:#f3e5f5,stroke:#6a1b9a,stroke-width:2px
+    classDef master fill:#ffebee,stroke:#c62828,stroke-width:2px,color:#000
+    classDef worker fill:#e8f5e9,stroke:#2e7d32,stroke-width:2px,color:#000
+    classDef bastion fill:#fff8e1,stroke:#f57f17,stroke-width:1px,color:#000
+    classDef storage fill:#f5f5f5,stroke:#616161,stroke-width:2px
+    classDef lb fill:#e0f7fa,stroke:#00838f,stroke-width:2px
+    classDef invisible fill:none,stroke:none
+
+    class PUBA,PUBB public
+    class PRIA,PRIB private
+    class M1,M2,M3 master
+    class W1,W2,W3 worker
+    class BASTA,BASTB,NATA,NATB bastion
+    class ECR,EFS,IAM,OIDC,SG storage
+    class NLB lb
+    class TOP,NLBEFS,AZS invisible

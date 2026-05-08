@@ -1,0 +1,77 @@
+---
+title: 3. Kubernetes 워크로드 / Namespace 레이아웃
+config:
+  flowchart:
+    defaultRenderer: elk
+---
+flowchart LR
+    subgraph K8S["⚓ Kubernetes 1.35 HA — 3 master + 3 worker, Calico CNI"]
+        direction TB
+
+        subgraph TOP[" "]
+            direction LR
+            subgraph SYS["📋 시스템"]
+                direction TB
+                KS["<b>kube-system</b><br/>━━━━━━━━━<br/>kube-apiserver / cm / sched<br/>kube-proxy · containerd<br/>Calico daemon<br/>AWS Load Balancer Ctlr"]
+                ARG["<b>argocd</b><br/>━━━━━━━━<br/>argocd-server<br/>repo-server<br/>application-controller<br/>applicationset-controller"]
+            end
+            subgraph OPS["🔧 Operators (CRD 등록)"]
+                direction TB
+                CNPG["<b>cnpg-system</b><br/>cnpg-operator<br/><i>CRD: Cluster</i>"]
+                STR["<b>kafka</b><br/>strimzi-cluster-operator<br/><i>CRD: Kafka, KafkaTopic,<br/>KafkaNodePool</i>"]
+                ROP["<b>ot-redis</b><br/>redis-operator<br/><i>CRD: RedisCluster</i>"]
+            end
+            subgraph OBS["📊 관측성"]
+                direction TB
+                MON["<b>monitoring</b><br/>━━━━━━━━<br/>Prometheus<br/>Grafana<br/>Alertmanager<br/>node-exporter"]
+                LK["<b>loki</b><br/>Loki + Promtail"]
+                OT["<b>otel</b><br/>OTel Collector<br/>(OTLP gateway)"]
+            end
+        end
+
+        subgraph DATA["🗄 <b>data</b> namespace — Database per Service"]
+            direction LR
+            subgraph PG["CNPG Cluster ×5 (PG16)"]
+                direction TB
+                PG1["user-db (5Gi, 2 replicas)"]
+                PG2["product-db"]
+                PG3["order-db"]
+                PG4["inventory-db"]
+                PG5["notification-db"]
+            end
+            subgraph KAFKA["Strimzi Kafka KRaft 4.2.0"]
+                direction TB
+                KC["controller × 3"]
+                KB["broker × 3"]
+                KT["KafkaTopic × 5<br/>━━━━━━━━━━━<br/>order.pending<br/>inventory.reserved<br/>inventory.confirmed<br/>inventory.cancelled<br/>notification.requested"]
+            end
+            subgraph REDIS["Redis Cluster 7.4.8"]
+                direction TB
+                RM["master × 3"]
+                RR["replica × 3"]
+                REX["redis-exporter"]
+            end
+        end
+
+        subgraph APPS["🚀 Microservices (각자 자기 namespace)"]
+            direction LR
+            GW["<b>user-api-gateway</b><br/>━━━━━━━━━━━<br/>Spring Cloud Gateway<br/>HTTP :8100"]
+            PS["<b>product-service</b><br/>━━━━━━━━━━<br/>HTTP :8001<br/>gRPC :9001"]
+            OS["<b>order-service</b><br/>━━━━━━━━━<br/>HTTP :8002<br/>gRPC :9002"]
+            IS["<b>inventory-service</b><br/>━━━━━━━━━━<br/>HTTP :8003<br/>gRPC :9003"]
+        end
+    end
+
+    classDef sys fill:#e1f5fe,stroke:#0277bd,stroke-width:2px,color:#000
+    classDef ops fill:#fff3e0,stroke:#e65100,stroke-width:2px,color:#000
+    classDef data fill:#f3e5f5,stroke:#6a1b9a,stroke-width:2px,color:#000
+    classDef obs fill:#e8f5e9,stroke:#1b5e20,stroke-width:2px,color:#000
+    classDef app fill:#fce4ec,stroke:#880e4f,stroke-width:2px,color:#000
+    classDef invisible fill:none,stroke:none
+
+    class KS,ARG sys
+    class CNPG,STR,ROP ops
+    class PG1,PG2,PG3,PG4,PG5,KC,KB,KT,RM,RR,REX data
+    class MON,LK,OT obs
+    class GW,PS,OS,IS app
+    class TOP invisible
