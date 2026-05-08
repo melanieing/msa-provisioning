@@ -67,7 +67,7 @@
 
 ### 운영 정책
 - **Sync Policy 표준**: `automated.prune=true`, `selfHeal=true`, `CreateNamespace=true`, `ServerSideApply=true`, `finalizers: resources-finalizer.argocd.argoproj.io`
-- **Sync Wave 순서**: AppProjects(-100) → platform-of-apps(-50) → operators(-20) → data(-10) → observability(0) → otel(5) → microservices(10)
+- **Sync Wave 순서**: AppProjects(-100) → platform-operators-app(-50) → platform-data-app(-40) → platform-observability-app(-30) → 그 안의 자식들 operators(-20)/data(-10)/observability(0)/otel(5) → microservices ApplicationSet(0)/자식 microservices(10). 부모 3개로 분리한 이유는 CLAUDE.md §7 / msa-argocd-manifest/platform/README.md 참조.
 
 ---
 

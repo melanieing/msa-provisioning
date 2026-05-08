@@ -14,7 +14,9 @@
 #
 # 마지막 task 의 root Application 이 핵심:
 #   melanieing/msa-argocd-manifest 의 'bootstrap/' 폴더를 watch.
-#   그 안의 projects-app, platform-of-apps, apps-appset 가 줄줄이 활성화됨.
+#   그 안의 projects-app(-100), platform-operators-app(-50),
+#   platform-data-app(-40), platform-observability-app(-30),
+#   apps-appset(0) 이 wave 순서대로 줄줄이 활성화됨.
 # ─────────────────────────────────────────────────────────────────────────
 
 - name: Argo CD 설치
@@ -84,7 +86,8 @@
 
     # ─── 6. root Application 생성 (GitOps 시작!) ──────────────────
     # 이 한 개의 Application 이 우리 매니페스트 레포의 'bootstrap/' 폴더를 watch.
-    # 그 안의 projects-app(-100) → platform-of-apps(-50) → apps-appset(0) 순서로 줄줄이 sync.
+    # 그 안의 projects-app(-100) → platform-operators(-50) → platform-data(-40)
+    # → platform-observability(-30) → apps-appset(0) 순서로 줄줄이 sync.
     # 즉 이 task 끝나면 GitOps 자동화가 본격 시작됨.
     - name: Argo CD root Application 생성 (App-of-Apps 진입점)
       kubernetes.core.k8s:

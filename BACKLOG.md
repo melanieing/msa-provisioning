@@ -1,6 +1,6 @@
 # Market Service MSA — 백로그 & 진행 상황
 
-> **마지막 갱신**: 2026-05-08
+> **마지막 갱신**: 2026-05-10
 > 단일 진실 원천(SSOT). 작업 시작/완료 시 여기 갱신.
 
 ---
@@ -10,18 +10,23 @@
 | 항목 | 값 |
 |---|---|
 | **마감일** | 2026-05-20 |
-| **남은 일수** | 12일 |
-| **현재 위치** | 🎉 부트스트랩 성공 + 3개 sync 이슈 발견 (BACKLOG 기록). 다음: 매니페스트 구조 fix + 재검증 |
-| **진행률** | Phase A 100%, **Phase B 90%** (sync 이슈로 약간 후퇴), Phase C 0%, Phase D 70% |
-| **AWS 비용 사용량** | 부트스트랩 시작 (시간당 ~553 KRW. EC2 stop 시 ~180 KRW) |
+| **남은 일수** | 11일 |
+| **현재 위치** | 어제 발견한 3개 sync 이슈 모두 fix 완료. 다음: cluster-bootstrap 재실행해서 진짜 deploy 검증 |
+| **진행률** | Phase A 100%, **Phase B 95%** (3 fix 적용, 검증 대기), Phase C 0%, Phase D 70% |
+| **AWS 비용 사용량** | 클러스터 destroy 상태 (어제 종료). 이번 부트스트랩 재실행 시 시간당 ~553 KRW |
 
 ### 다음 우선순위 (순서대로)
 
-1. **🎯 [B-1 보강] platform 을 3개 Application 으로 분리** — operators / observability / data. dependency 시간차 해결.
-2. **🎯 [B-1g 보강] apps AppProject 에 Namespace 추가** — `clusterResourceWhitelist: [{group: "", kind: Namespace}]`.
-3. **🎯 [B-2 보강] Helm 차트 group/version empty 디버깅** — `helm template` 으로 render 결과 검사 + 빈 manifest 찾기.
-4. **위 3개 fix 후 부트스트랩 재시도** — 4 마이크로서비스 진짜 deploy 검증.
-5. **[Phase C-1]** JWT secret + DB 비밀번호 K8s Secret.
+1. **cluster-bootstrap.ps1 재실행** — 어제 fix + 오늘 fix 다 적용된 상태로 첫 깨끗한 deploy 검증.
+2. **ArgoCD UI 에서 7+ Application 모두 Synced/Healthy 확인** — projects, platform-operators-app, platform-data-app, platform-observability-app, 그 자식 9개, 마이크로서비스 4개.
+3. **마이크로서비스 Pod 가 실제로 실행되는지 확인** — `kubectl get pods -A`. CrashLoopBackOff 발생 시 DB 연결/configmap 문제 디버깅.
+4. **[Phase C-1]** JWT secret + DB 비밀번호 K8s Secret 으로 옮기기.
+
+### ✅ 오늘 fix 완료 (3건)
+
+- **이슈 A — platform-of-apps 분리**: `bootstrap/platform-of-apps.yaml` 삭제, 대신 `platform-operators-app.yaml`(-50) / `platform-data-app.yaml`(-40) / `platform-observability-app.yaml`(-30) 3개 신규. 핵심: **`recurse: false`** 로 부모가 raw CR (`_postgres/_kafka/_redis`) 직접 apply 못 하게 차단. 자식 Application 만 sync 하고, 자식이 자기 서브폴더의 CR 을 sync 하므로 그때엔 CRD 이미 등록된 상태.
+- **이슈 B — apps AppProject Namespace whitelist**: `projects/apps-project.yaml` 의 `clusterResourceWhitelist: []` → `[{group: "", kind: Namespace}]`. ApplicationSet 의 `CreateNamespace=true` 가 `user-api-gateway` 등 namespace 만들 수 있음. CRD/ClusterRole 은 여전히 차단.
+- **이슈 C — Helm 차트 serviceaccount.yaml 의 `{{- if .. -}}` whitespace trim 버그**: `-}}` 가 다음 줄 newline 까지 먹어서 코멘트 라인 (`# ─────`) 과 `apiVersion: v1` 이 한 줄로 붙어버려 `apiVersion` 이 코멘트 안으로 들어감 → manifest 의 group/version 이 비게 됨. 4개 차트 (`user-api-gateway` / `product-service` / `order-service` / `inventory-service`) 모두 `-}}` → `}}` 로 수정. 4개 모두 helm lint + render 통과.
 
 ### 🚨 위험 / 차단 요소
 
@@ -29,9 +34,9 @@
 - ✅ **2026-05-09 발견**: `cluster-bootstrap.ps1` 의 WSL path 변환에 PS 7+ 전용 문법(script block in -replace) 사용해서 PS 5.1 에서 실패. **fix 적용 완료** — Resolve-Path + manual regex replace 로 교체.
 - ✅ **2026-05-09 발견**: `terraform.tfvars` 의 `ssh_private_key_path` 가 Windows 절대경로(`C:/...`)로 override 되어 inventory.ini 에 박혀 WSL ansible 의 ProxyCommand 가 키를 못 찾음. **fix 절차** — tfvars 의 그 라인 제거 → default(`~/.ssh/...`) 사용 → ssh 가 자동으로 home 풀음. 즉시 처리는 sed 로 inventory.ini 패치.
 - ✅ **2026-05-09 발견**: inventory.tftpl 의 group vars 가 [all:vars] 의 `ansible_ssh_common_args` 를 override 해서 outer SSH(private 노드로) 의 `StrictHostKeyChecking=no` 가 적용 안 됨 → fingerprint 프롬프트. **fix 적용 완료** — group vars 의 args 에 outer + inner 둘 다 명시. 즉시 우회는 `ANSIBLE_HOST_KEY_CHECKING=False` env.
-- 🔴 **2026-05-09 발견 (미fix)**: ArgoCD 의 **`platform-of-apps` sync 실패** — `platform/` 폴더 한 Application 으로 recurse 처리하니 Operator helm install 끝나기 전에 Cluster CRD 적용 시도 → "CRD not found" 에러. **해결 방향**: bootstrap/ 에 platform 을 3개 Application 으로 분리 (`platform-operators-app` / `platform-observability-app` / `platform-data-app`). sync wave + healthy 대기로 dependency 정의.
-- 🔴 **2026-05-09 발견 (미fix)**: ArgoCD 의 **마이크로서비스 4개 sync 실패** — `apps` AppProject 의 `clusterResourceWhitelist: []` 라서 Namespace 생성 거부. **해결 방향**: `apps-project.yaml` 에 `{group: "", kind: Namespace}` 추가.
-- 🔴 **2026-05-09 발견 (미fix)**: 마이크로서비스 차트의 `failed to discover server resources for group version` 에러 — Helm template render 결과 중 일부가 group/version 비어있는 manifest 생성. _helpers.tpl 또는 conditional 디버깅 필요.
+- ✅ **2026-05-10 fix**: `platform-of-apps` 단일 Application 을 3개로 분리 (operators/data/observability). 핵심은 `recurse: false` — 옛 recurse:true 가 `_postgres/_kafka/_redis` 의 raw CR 까지 부모가 직접 apply 시도해서 CRD 인식 실패였음. 이제 부모는 Application yaml 만 apply, 자식이 자기 CR 처리.
+- ✅ **2026-05-10 fix**: `apps-project.yaml` 의 `clusterResourceWhitelist` 에 `Namespace` 추가. ApplicationSet 의 CreateNamespace=true 가 동작.
+- ✅ **2026-05-10 fix**: 4개 차트 `serviceaccount.yaml` 의 `{{- if .. -}}` 의 trailing `-}}` 가 newline 을 먹어서 `apiVersion: v1` 이 코멘트 라인 끝에 붙음 → `-}}` 를 `}}` 로 변경. 4개 차트 모두 helm lint + render 통과.
 - ✅ **2026-05-09 발견**: `kubeadm-config.yaml.j2` 의 `certSANs` 가 root level 에 있어 K8s 1.35 의 v1beta3 검증 실패 (`block sequence entries are not allowed in this context`). **fix 적용 완료** — `apiServer.certSANs` 아래로 이동 + indent 2 spaces 통일. 원작자가 K8s 1.30 에서 만든 거라 lenient 하게 통과했지만 1.35 에선 엄격.
 - ✅ **2026-05-09 해결**: 첫 클러스터 부트스트랩 100% 성공. PDF 5.5.1 의 DR 시나리오 4단계 검증 완료.
 - ✅ **2026-05-08 발견**: 사용자 첫 `terraform plan` 시 사전 준비 누락 발견 → SSH 키 + IAM Role 수동 생성 가이드 안내. 후속: IAM Role 도 Terraform 자동화 (아래 추가)
@@ -40,6 +45,12 @@
 ---
 
 ## ✅ 완료 (역순, 최근 → 옛날)
+
+### 2026-05-10
+- ✅ **🐛 어제 발견된 3개 sync 이슈 모두 fix** (재부트스트랩 검증 대기):
+  - **이슈 A — platform-of-apps 분리**: `bootstrap/platform-of-apps.yaml` 삭제 + 3개 신규 (`platform-operators-app.yaml` / `platform-data-app.yaml` / `platform-observability-app.yaml`). 각자 자기 서브폴더만 watch + **`recurse: false`** (옛 recurse:true 가 `_postgres/_kafka/_redis` raw CR 직접 apply 시도해서 CRD 인식 실패). 자식 Application 들이 자기 CR 처리하도록 위임. 부모 wave 는 -50 / -40 / -30 으로 dependency 정의. 관련 파일 코멘트 / README 도 같이 갱신 (`msa-argocd-manifest/README.md`, `platform/README.md`, `cnpg-operator.yaml`, `apps-appset.yaml`, `STACK.md`, `argocd-setup.yaml`).
+  - **이슈 B — apps AppProject Namespace 허용**: `projects/apps-project.yaml` 의 `clusterResourceWhitelist: []` → `[{group: "", kind: Namespace}]`. CRD/ClusterRole 은 여전히 차단해서 마이크로서비스 권한 안전장치 유지.
+  - **이슈 C — Helm 차트 group/version empty 버그**: 4개 차트의 `templates/serviceaccount.yaml` 에서 `{{- if .Values.serviceAccount.create -}}` 의 trailing `-}}` 가 다음 줄 newline 을 먹어서 코멘트 라인 (`# ─────`) 과 `apiVersion: v1` 이 한 줄로 붙음 → `apiVersion` 이 `#` 코멘트 안으로 들어가 사라짐 → manifest 의 group/version 비어 ArgoCD discovery 실패. `-}}` → `}}` (closing dash 만 제거). 4개 차트 (`user-api-gateway` / `product-service` / `order-service` / `inventory-service`) 모두 helm lint + render 검증 통과 (4개 manifest 의 apiVersion 모두 자기 줄에 정상).
 
 ### 2026-05-09
 - ✅ **🎉🎉 첫 클러스터 부트스트랩 100% 성공** — `ANSIBLE_HOST_KEY_CHECKING=False ansible-playbook` 로 11개 playbook 모두 완주. 6 노드 모두 `failed=0 unreachable=0`. main-master 의 `ok=50 changed=26` 은 kubeadm init + Calico + Helm + AWS LBC + Argo CD 까지 다 완료. PDF 5.5.1 의 4단계 부트스트랩 (Terraform → Ansible → kubectl apply argocd → root sync) 검증 완료.
@@ -214,6 +225,7 @@ Day 13  (5/20)     : 발표
 
 | 일자 | 변경 |
 |---|---|
+| 2026-05-10 | 어제의 3개 sync 이슈 모두 fix: (A) platform-of-apps → 3 Apps (recurse:false), (B) apps-project Namespace whitelist, (C) 4 차트 serviceaccount.yaml whitespace trim 버그. 검증 대기. |
 | 2026-05-08 | B-2d/e/f 3개 backend 차트 + B-2c 리팩터 (ports list 패턴, 4 charts 공통 templates). 4개 차트 lint 통과. |
 | 2026-05-08 | B-2c user-api-gateway Helm 차트 작성 (Chart.yaml + values.yaml + 5 templates). |
 | 2026-05-08 | Phase B ID 체계 통일: B1~B8 → B-1a~g, B6a~e → B-2c~g (sub-phase 일관성 확보). |
