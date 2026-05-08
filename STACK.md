@@ -1,6 +1,6 @@
 # Market Service MSA — 기술 스택 & 버전
 
-> **마지막 검증일**: 2026-05-11
+> **마지막 검증일**: 2026-05-11 (부트스트랩 + ArgoCD 19/19 Synced/Healthy + 모든 Pod Running)
 > 버전은 모두 GitHub releases API / ArtifactHub 직접 조회로 확인됨.
 
 ---
@@ -76,11 +76,11 @@
 | 컴포넌트 | 차트 버전 | 적용 상태 | release | 비고 |
 |---|---|---|---|---|
 | **CNPG (PostgreSQL Operator)** | **0.28.0** | ✅ 적용 | 2026-04-01 | cloudnative-pg chart |
-| **Strimzi (Kafka Operator)** | **1.0.0** | ✅ 적용 | 2026-04-28 | 메이저 마일스톤. Kafka 4.x 만 지원 |
+| **Strimzi (Kafka Operator)** | **1.0.0** | ✅ 적용 | 2026-04-28 | 메이저 마일스톤. Kafka 4.x 만 지원. **`watchAnyNamespace: true`** (Issue N, 2026-05-11) — Kafka CR 이 다른 ns 에 있을 때 reconcile 위해. |
 | **Redis Operator** | **0.24.0** | ✅ 적용 | 2026-03-13 | OT-CONTAINER-KIT |
 | **kube-prometheus-stack** | **84.5.0** | ✅ 적용 | 2026-05-01 | Prometheus + Grafana + Alertmanager 묶음 |
-| **Loki** | **7.0.0** (app: 3.6.7) | ✅ 적용 | — | grafana/loki helm chart |
-| **OpenTelemetry Collector** | **0.153.0** | ✅ 적용 | 2026-04-30 | OTLP 게이트웨이 |
+| **Loki** | **7.0.0** (app: 3.6.7) | ✅ 적용 | — | grafana/loki helm chart. **`deploymentMode: SingleBinary`** + filesystem storage (D3 partial, 2026-05-11). 학습용 minimal — D7 (S3) 도입 후 SimpleScalable 격상 가능. |
+| **OpenTelemetry Collector** | **0.153.0** | ✅ 적용 | 2026-04-30 | OTLP 게이트웨이. **`image.repository: otel/opentelemetry-collector-contrib`** + **`mode: deployment`** + presets.kubernetesAttributes (D3 partial, 2026-05-11). D2 (microservice SDK) 작업 시 exporter pipeline 채울 예정. |
 | **emberstack/reflector** | **10.0.41** | ✅ 적용 (2026-05-11) | 2026-05-08 | cross-namespace Secret/ConfigMap 자동 복제 (Issue L) |
 
 ---
@@ -231,6 +231,7 @@
 
 | 일자 | 변경 |
 |---|---|
+| 2026-05-11 | **부트스트랩 검증 통과 (ArgoCD 19/19 Synced/Healthy)**. N (Strimzi watchAnyNamespace=true), D3 partial (Loki SingleBinary, OTel contrib), root-app cosmetic 추가. 다음 라운드 후보 5개 발견 (A++b/O/P/Q/R). |
 | 2026-05-11 | A5 (KMS CMK + EFS SSE), A6 (VPC Endpoint S3 gateway + KMS interface), C8 (JWT K8s Secret), D11 (Trivy GHA scan) 4개 묶음 추가. |
 | 2026-05-11 | emberstack/reflector 10.0.41 추가 (Issue L). CNPG inheritedMetadata + redis-secret annotation 으로 cross-namespace Secret 자동 복제. |
 | 2026-05-08 | D1-d: GitHub Actions workflow (matrix + OIDC + ECR push + GHA layer cache). D1-a/b/c Terraform 모듈 (ECR + KMS + OIDC). |

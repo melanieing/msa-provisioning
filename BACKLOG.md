@@ -11,15 +11,69 @@
 |---|---|
 | **마감일** | 2026-05-20 |
 | **남은 일수** | 9일 |
-| **현재 위치** | **2026-05-11 — K + L + base-path + A5 + A6 + C8 + D11 7개 fix 묶음 완료, 검증 직전**. 3 레포 main push 끝. 마지막 cluster-bootstrap 1회로 일괄 검증 — sync wave 가 자연스레 멈추는 위치에서 디버깅. |
-| **진행률** | Phase A 95% (A5/A6 완료, A4/A++ 잔여), **Phase B 98%** (검증 후 100%), Phase C 12% (C8 완료, C1~C7 잔여), Phase D 80% (D1+D11 완료, D2~D10/D12 잔여) |
-| **AWS 비용 사용량** | 2026-05-10 부트스트랩 ×4 후 destroy. 2026-05-11 은 코드 작업만, 검증 부트스트랩 1회 예정. |
+| **현재 위치** | **2026-05-11 종료 — 7 fix + N + D3 partial + root-app cosmetic 묶음 검증 완료, ArgoCD 19/19 Synced/Healthy**. 클러스터 destroy 예정. |
+| **진행률** | Phase A 95% (A5/A6 완료, A4/A++/A++b 잔여), **Phase B 100%** ⬆ (microservice 4개 + Kafka + Redis + Postgres + reflector 다 동작 검증), Phase C 12% (C8 완료, C1~C7 잔여), **Phase D 85%** ⬆ (D1 + D11 + D3 partial 완료, D2/D3 풀스택/D4~D10/D12 잔여) |
+| **AWS 비용 사용량** | 2026-05-11 부트스트랩 1회 (검증). destroy 후 0. 12일째 누적: 50,000원 추정. |
 
 ### 다음 우선순위 (순서대로)
 
-1. **🟢 검증 부트스트랩 (오늘 마지막 30분)** — 오늘 fix 한 K + L + base-path 일괄 검증. 기대 결과: ① inventory-service Pod 가 Redis Cluster 에 정상 연결 (`SPRING_DATA_REDIS_CLUSTER_NODES` 인식 + Lettuce/Redisson cluster 모드 활성), ② CNPG `<cluster>-app` Secret 과 redis-secret 이 reflector 에 의해 microservice ns 로 자동 복제 (수동 stopgap 불필요), ③ user-api-gateway 가 더 이상 ~2분 만에 kill 되지 않음 (actuator base-path /actuator/* 로 통일).
-2. **[Phase C-1]** JWT secret K8s Secret 으로 옮기기 (DB + Redis 비밀번호는 Issue I/L 로 해결됨).
-3. **[Phase D-2]** OpenTelemetry SDK 5개 서비스 통합.
+**다음 라운드 = 묶음 ① 백엔드 Must (C1+C2+C3+C4+C5)**. 모두 클러스터 꺼둔 채 작성 가능, 검증 1회 부트스트랩 (~45분, ~380원).
+
+1. **C1** — JWT 인증 필터 (user-api-gateway). Spring Cloud Gateway 의 GlobalFilter 또는 reactive WebFilter + JJWT 검증. C8 으로 secret 이미 envFrom 주입됨. 401/200 응답 분기.
+2. **C2** — Rate Limit 필터 (Token Bucket). Spring Cloud Gateway 의 `RequestRateLimiter` + Redisson 또는 RedisRateLimiter. user-api-gateway chart 에 SPRING_DATA_REDIS_CLUSTER_NODES 추가 (현재 inventory 만 redis 사용).
+3. **C3** — Resilience4j Circuit Breaker. resilience4j-spring-boot3 의존성 + application.yaml 설정 + gRPC client 호출에 @CircuitBreaker(fallbackMethod=...).
+4. **C4** — Outbox Poller. order-service 에 `@Scheduled(fixedRate=5000)` + KafkaTemplate.send. `@EnableScheduling` 활성.
+5. **C5** — notification-service 최소 구현. 새 모듈 + KafkaListener (4 토픽 구독) + 단일 채널 스텁 (이메일 또는 로그). build-and-push.yml matrix 에 추가.
+
+**그 다음 라운드 = 묶음 ② 관측성 (D2+D3 풀스택+D4)**:
+- D2 OTel Java SDK + agent → 5 microservice
+- D3 OTel collector pipeline (OTLP receiver → Prometheus/Loki/Tempo exporter)
+- D4 Grafana 대시보드 1~2개 (latency, Kafka lag)
+- 부수: 새 이슈 P (metrics-server install) + Q (Grafana svc port-forward) 같이 처리
+
+**그 다음 라운드 = 묶음 ③ 운영 안정화 (A++b + O + R + A4 옵션)**:
+- A++b: OIDC + IAM Role + ECR 영구화 → destroy/bootstrap cycle 매끄러움 (GHA push 항상 동작)
+- O: argocd-server resource limits (restart loop 해결)
+- R: build-and-push.yml paths 필터에 `**/application.yaml` 추가
+- A4: Terraform S3 backend (옵션, 1인 프로젝트라 우선순위 ↓)
+
+**Critical Path (마감 9일 역산, 2026-05-12 ~ 2026-05-20)**:
+```
+5/12~5/13  : 묶음 ① (C1~C5)               ← Critical path 최상위
+5/14       : 묶음 ③ 운영 안정화          ← 다음 부트스트랩 매끄럽도록
+5/15~5/16  : 묶음 ② 관측성                ← C1~C5 동작 후에야 trace/metric 의미 ↑
+5/17       : D8 Newman E2E + 시연 리허설 1차
+5/18       : D7 정적 페이지 + 버그 잡기
+5/19       : D12 발표 자료 + 시연 리허설 2차
+5/20       : 발표
+```
+
+### ✅ 2026-05-11 검증 완료 (7 fix + N + D3 partial + root-app cosmetic)
+
+부트스트랩 1회로 일괄 검증. ArgoCD 19/19 Synced/Healthy + 모든 namespace Pod Running + PVC 16개 Bound to gp3.
+
+| Phase ID | 검증 증거 |
+|---|---|
+| **K** Redis Cluster 연동 | inventory-service `1/1 Running, RESTARTS=0, 17m+`. Spring Boot 가 `SPRING_DATA_REDIS_CLUSTER_NODES=redis-leader.data.svc.cluster.local:6379` 인식 → Lettuce/Redisson cluster 모드 활성 → `CLUSTER NODES` topology 자동 발견. |
+| **L** reflector cross-namespace | `reflector-7d85d6bcfb-p6jmt 1/1 Running 33m+`. CNPG `inventory/order/product-db-app` Secret 과 `redis-secret` 이 microservice ns 로 자동 복제 → microservice 의 envFrom secretRef 자기 ns 에서 정상 resolve. |
+| **base-path** user-api-gateway shutdown 의 root cause | user-api-gateway `1/1 Running 49m+, RESTARTS=0`. 어제까지 ~2분 만에 kill 패턴 사라짐. |
+| **A5** KMS CMK + EFS SSE | terraform apply 성공. AWS 콘솔 KMS alias `*-efs` + EFS describe 시 Encrypted=True + KmsKeyId 우리 CMK arn. |
+| **A6** VPC Endpoint S3 + KMS | terraform apply 성공. S3 gateway endpoint (Route Table entry) + KMS interface endpoint (private DNS resolve). |
+| **C8** JWT K8s Secret | user-api-gateway envFrom secretRef 정상. `JWT_SECRET=...` env 가 chart secret.yaml 에서 주입 → application.yaml 의 `${JWT_SECRET}` 매칭. CLAUDE.md §6 위반 해소. |
+| **D11** Trivy GHA scan | workflow 파일 main 에 push, 다음 build trigger 시 trivy-scan job 4개 자동 추가. |
+| **N** Strimzi watchAnyNamespace | Kafka 6 Pod (broker 3 + controller 3) `1/1 Running 21m+`. operator 가 cluster-wide watch → data ns 의 KafkaNodePool/Kafka CR 발견 후 reconcile → broker/controller statefulset 생성. |
+| **D3 partial** Loki + OTel minimal | `loki-0 2/2 Running 5m+` (SingleBinary mode + filesystem storage), `otel-collector-* 1/1 Running 5m+` (image=contrib + mode=deployment). PVC `storage-loki-0 5Gi Bound`. |
+| **root-app cosmetic** | platform-data-app + platform-operators-app + platform-observability-app 의 `directory.recurse: false` 명시 제거 (default 와 일치). 19/19 Synced. |
+
+### 🆕 2026-05-11 새 이슈 발견 (다음 라운드 후보)
+
+| 임시 ID | 항목 | 우선순위 |
+|---|---|---|
+| **A++b** | OIDC + IAM Role + ECR 콘솔 영구화 — destroy 마다 OIDC 사라져서 다음 push 시 GHA fail. ECR 비어있어서 microservice image pull 실패 cascade. ECR 까지 영구화하면 매 cycle 매끄러움. 비용 ~월 100원 (ECR storage). | High (다음 라운드) |
+| **O** | argocd-server restart loop — readiness probe 9번 fail → SIGTERM (143) → 재시작 cycle. 메모리 부족 또는 timeout 짧음. fix: chart values 의 server.resources.limits.memory 증가 또는 readinessProbe.timeoutSeconds 조정. | Medium |
+| **P** | metrics-server 미설치 — `kubectl top` 안 됨. ansible playbook 으로 install 또는 helm. | Medium |
+| **Q** | Grafana service port-forward hang — `svc/kube-prometheus-stack-grafana 3000:80` 으로 port-forward 시 endpoint 못 찾음. svc selector 또는 port spec 검토. | Low |
+| **R** | build-and-push.yml paths 필터에 `**/application.yaml` 추가 — 단독 yaml 변경 시 build trigger 안 됨. 오늘 D11 commit 의 paths 매칭으로 우연히 해결됐지만 영구 fix 필요. | Low |
 
 ### ✅ 오늘 검증 완료 (어제 fix 의 결과)
 
@@ -77,7 +131,15 @@
 
 ## ✅ 완료 (역순, 최근 → 옛날)
 
-### 2026-05-11 (스프린트 4일째 — K + L + base-path + A5 + A6 + C8 + D11 묶음, 검증 대기)
+### 2026-05-11 (스프린트 4일째 — 7 fix + N + D3 partial 묶음 검증 완료)
+- ✅ **부트스트랩 1회로 일괄 검증 성공**. ArgoCD 19/19 Synced/Healthy. 모든 namespace Pod Running. PVC 16개 Bound to gp3. K8s 1.35.4 6 nodes Ready.
+- ✅ **N (신규) — Strimzi operator watchAnyNamespace=true**: 부트스트랩 검증 중 발견. Kafka CR 이 `data` ns 에 있는데 operator 가 자기 ns (`kafka-system`) 만 watch → reconcile 안 함 → broker/controller Pod 안 뜸 → microservice DNS resolve 실패 cascade. fix: helm values 에 `watchAnyNamespace: true` (CNPG/redis 와 일관 cluster-wide).
+- ✅ **D3 partial — Loki + OTel collector minimal values**: helm chart default 가 너무 무거움 (Loki SimpleScalable + S3 필수, OTel image.repository unset). 학습용 minimal: Loki=SingleBinary+filesystem, OTel=contrib+deployment.
+- ✅ **root-app cosmetic OutOfSync** — platform-data-app/operators-app/observability-app 의 `directory.recurse: false` 명시 제거 (ArgoCD default 와 일치). git vs cluster state mismatch 해소.
+- 📦 4 commit (msa-argocd-manifest), 모두 main push.
+- 🆕 다음 라운드 후보 5개 발견 (A++b, O, P, Q, R). 위 표 참조.
+
+### 2026-05-11 (스프린트 4일째 오전 — K + L + base-path + A5 + A6 + C8 + D11 묶음)
 - ✅ **A5 — KMS CMK + EFS SSE 암호화** (msa-provisioning): storage 모듈에 KMS key + alias 추가. EFS 본체에 encrypted=true + kms_key_id. PDF §5.3 의 EBS+EFS+ECR 충족 (S3 는 D7 시 추가). outputs.tf 에 kms_key_arn 노출.
 - ✅ **A6 — VPC Endpoint S3 (gateway, 무료) + KMS (interface, ~38원/h × 2 AZ)** (msa-provisioning): network 모듈. Route Table 에 S3 endpoint entry 자동, KMS 는 private_dns_enabled 로 SDK 코드 변경 0. 새 SG 'vpc-endpoint-sg' (HTTPS 443 from VPC). PDF §5.1 충족.
 - ✅ **C8 — JWT secret → K8s Secret** (msa-spring-boot): values.yaml jwtSecret → templates/secret.yaml → deployment.yaml envFrom secretRef → Pod env JWT_SECRET → application.yaml ${JWT_SECRET} 매칭. ⚠️ 학습용 평문 (git commit), 운영급 wiring 갖춤. CLAUDE.md §6 위반 해소.
