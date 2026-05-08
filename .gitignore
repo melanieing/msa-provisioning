@@ -11,6 +11,10 @@ crash.log
 .ansible_cache
 *.retry
 
+# Terraform 이 매 apply 마다 새 IP 로 재생성 — tracking 부적절
+# 템플릿 (terraform/inventory.tftpl) 이 source of truth
+ansible/inventory.ini
+
 *.pem
 *.key
 *.pub
