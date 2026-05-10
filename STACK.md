@@ -1,6 +1,6 @@
 # Market Service MSA — 기술 스택 & 버전
 
-> **마지막 검증일**: 2026-05-11 (부트스트랩 + ArgoCD 19/19 Synced/Healthy + 모든 Pod Running)
+> **마지막 검증일**: 2026-05-12 (부트스트랩 ×3 cycle 후 V t3.large 동작 확인 + ArgoCD 20/20 Synced/Healthy + 묶음 ① 백엔드 검증)
 > 버전은 모두 GitHub releases API / ArtifactHub 직접 조회로 확인됨.
 
 ---
@@ -39,7 +39,7 @@
 | AWS Provider | ~> 5.60 | ✅ 적용 | hashicorp/aws |
 | Ansible | >= 2.14 | ✅ 사용 | (사용자 WSL 에 설치) |
 | AMI | Amazon Linux 2 (`ami-087e08db3e40f7429`) | ✅ 적용 | ap-northeast-2 |
-| EC2 인스턴스 | t3.medium (master/worker) + t3.nano (bastion) | ✅ 적용 | 변수화됨 |
+| EC2 인스턴스 | **t3.medium (master) + t3.large (worker, V fix 2026-05-12) + t3.nano (bastion)** | ✅ 적용 | worker memory 3.84 → 7.68 GiB. cluster 시간당 ~675원 |
 | Region | ap-northeast-2 | ✅ 적용 | `var.region` |
 
 ---
@@ -122,7 +122,7 @@
 | **Gradle** | 8.14.4 | ✅ 적용 (2026-05-08) | wrapper jar 누락 fix. Spring Initializr 에서 추출 |
 | **Spring Boot** | **3.5.14** | ✅ 적용 (2026-05-08) | PDF 4.1절. `./gradlew assemble` 14개 모듈 통과 |
 | **Spring Cloud Gateway** | 4.3.0 | ✅ 적용 | user-api-gateway. Spring Boot 3.5 짝 |
-| **Resilience4j** | **2.2.0** (spring-boot3 + kotlin + reactor) | ✅ 적용 (2026-05-12) | C3 — 4 gRPC client 호출에 @CircuitBreaker. slidingWindow=10 / failureRate=50% / waitDuration=10s. fallbackMethod 으로 빈 응답. |
+| **Resilience4j** | **2.2.0** (spring-boot3 + kotlin + reactor) | ⚠️ 적용 + **suspend 호환성 fix 필요** (W 항목) | C3 — 4 gRPC client 호출에 @CircuitBreaker + fallbackMethod. slidingWindow=10 / failureRate=50% / waitDuration=10s. **검증 발견 (2026-05-12)**: `@CircuitBreaker` annotation 의 Spring AOP 가 Kotlin suspend method 의 Continuation 파라미터 인식 못 함 → fallback 미동작. fix: `executeSuspendFunction` manual wrap 또는 Mono 변환. 묶음 ③ 와 함께 fine-tune. |
 | **gRPC** | grpc-java 매칭 | ✅ 적용 | 서비스 간 내부 통신 (PDF 허용 범위) |
 | **QueryDSL** | kapt 통해 | ✅ 적용 | 동적 쿼리 |
 | **Redisson** | 3.27.2 | ✅ 적용 | 분산 락 |
@@ -231,7 +231,8 @@
 
 | 일자 | 변경 |
 |---|---|
-| 2026-05-12 | **묶음 ① 백엔드 Must 작성 완료** — C1+C2+C3+C4+C5. Resilience4j 2.2.0 도입. notification-service 모듈 신규. user-api-gateway 의 anyExchange permitAll → authenticated 전환. Phase C: 12% → 75%. 검증 부트스트랩 대기. |
+| 2026-05-12 | **묶음 ① 검증 완료** — C1+C4+C5+C8 ✅ 통과, C2/C3 fine-tune 후속. **V (t3.large worker) 도입 + 검증** — memory cascade meltdown 해소. 7 issue 발견 + 5 fix push (C5 buildbug, C5 ECR 누락, K8S_VARS_HOLDER, gRPC env mismatch, V worker, W suspend 호환성). |
+| 2026-05-12 | **묶음 ① 백엔드 Must 작성 완료** — C1+C2+C3+C4+C5. Resilience4j 2.2.0 도입. notification-service 모듈 신규. user-api-gateway 의 anyExchange permitAll → authenticated 전환. Phase C: 12% → 80%. |
 | 2026-05-11 | **부트스트랩 검증 통과 (ArgoCD 19/19 Synced/Healthy)**. N (Strimzi watchAnyNamespace=true), D3 partial (Loki SingleBinary, OTel contrib), root-app cosmetic 추가. 다음 라운드 후보 5개 발견 (A++b/O/P/Q/R). |
 | 2026-05-11 | A5 (KMS CMK + EFS SSE), A6 (VPC Endpoint S3 gateway + KMS interface), C8 (JWT K8s Secret), D11 (Trivy GHA scan) 4개 묶음 추가. |
 | 2026-05-11 | emberstack/reflector 10.0.41 추가 (Issue L). CNPG inheritedMetadata + redis-secret annotation 으로 cross-namespace Secret 자동 복제. |

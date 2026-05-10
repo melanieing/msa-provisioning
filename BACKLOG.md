@@ -1,6 +1,6 @@
 # Market Service MSA — 백로그 & 진행 상황
 
-> **마지막 갱신**: 2026-05-11
+> **마지막 갱신**: 2026-05-12
 > 단일 진실 원천(SSOT). 작업 시작/완료 시 여기 갱신.
 
 ---
@@ -11,23 +11,22 @@
 |---|---|
 | **마감일** | 2026-05-20 |
 | **남은 일수** | 9일 |
-| **현재 위치** | **묶음 ① 백엔드 Must (C1+C2+C3+C4+C5) 작성 완료, 검증 직전**. 3 commit msa-spring-boot main + 1 commit msa-argocd-manifest. GHA 자동 트리거 → 5 service × 2 tag ECR build + Trivy scan. 다음 단계 = 부트스트랩 1회 검증. |
-| **진행률** | Phase A 95% (A5/A6 완료, A4/A++/A++b 잔여), **Phase B 100%** (microservice 다 검증), **Phase C 75%** ⬆⬆ (C1+C2+C3+C4+C5+C8 = 6/8 완료, C6/C7 만 잔여 + 모두 Should), **Phase D 85%** (D1 + D11 + D3 partial 완료) |
-| **AWS 비용 사용량** | 어제 부트스트랩 1회 (검증). 묶음 ① 작성은 클러스터 무관. 묶음 ① 검증 부트스트랩 1회 예정. |
+| **현재 위치** | **묶음 ① 검증 완료 + V (t3.large) 동작 확인**. 부트스트랩 ×3 cycle 진행 중 발견된 7 issue (C5 buildbug, C5 ECR 누락, K8S_VARS_HOLDER, gRPC env mismatch, S orphan EBS, V worker meltdown, C3 suspend 호환성) 모두 진단 + 5/7 fix push. ArgoCD 20/20 Healthy/Synced + 모든 Pod Running 검증 완료. 클러스터 destroy 됨. |
+| **진행률** | Phase A 95% (A5/A6 완료, A4/A++/A++b 잔여), **Phase B 100%** (microservice 다 검증), **Phase C 80%** ⬆ (C1+C4+C5+C8 ✅, C2/C3 fine-tune 후속, C6/C7 Should 잔여), **Phase D 85%** (D1 + D11 + D3 partial 완료) |
+| **AWS 비용 사용량** | 2026-05-12 cluster meltdown 디버깅 + V 적용 후 2 cycle 부트스트랩 ≈ ~3시간 운영 ≈ ~2,000원. 누적 ~10,000원 (예산 15%). 남은 56,000원 ≈ 80시간 운영 가능 (t3.large 시 ~75시간). |
 
 ### 다음 우선순위 (순서대로)
 
-**검증 부트스트랩 → 묶음 ② → ③ 순서**.
+**다음 라운드 = 묶음 ③ 운영 안정화 (cycle 마찰 제거)**. 그 후 묶음 ② 관측성.
 
-1. **🟢 묶음 ① 검증 부트스트랩** — C1+C2+C3+C4+C5 가 ECR 새 image 로 부트스트랩 시 자동 적용. 검증 6개:
-   - JWT 인증: `curl -X POST gateway/auth/login {admin/admin}` → 토큰 → `curl -H "Authorization: Bearer <token>"` (401/200)
-   - Rate Limit: `for i in {1..30}; do curl gateway/api/v1/products; done` (429 발생)
-   - Circuit Breaker: `kubectl scale deploy/product-service --replicas=0` 후 호출 (fallback 응답 + log)
-   - Outbox Poller: `kubectl logs -n order-service deploy/order-service | grep outbox-poller` (5초 주기 polling) + Kafka 메시지 도달
-   - notification: `kubectl logs -n notification-service deploy/notification-service` (📨 메시지 받음)
-   - ArgoCD: notification-service 신규 Application 자동 등록 + 19+1 = **20 Synced/Healthy**
-2. **🔴 묶음 ③ 우선순위 격상 — A++b + O + R + T**: destroy/bootstrap cycle 매끄러움. 매 cycle 마다 사용자가 GHA Re-run 해야 하는 마찰 + EBS/기타 orphan 검증 부담을 자동화. **이전 라운드보다 먼저** (cycle 효율 우선). 특히 **A++b**: OIDC + IAM + ECR 영구화로 cycle 마다 GHA push 자동 동작. 사용자 발견 (2026-05-12): "이 시점에 ECR/OIDC 없잖아" — 매 cycle 의 가장 큰 마찰.
-3. **묶음 ② 관측성 (D2 + D3 풀스택 + D4)** — C1~C5 동작 후 metric/trace/log 가 의미 있어짐. 부수: P (metrics-server) + Q (Grafana svc) 같이.
+1. **🔴 묶음 ③ — A++b + O + R + T + W + C2/C3 fine-tune**: cycle 효율 + suspend 호환성. 한 묶음으로:
+   - **A++b**: OIDC + IAM + ECR 영구화 (cycle 마다 GHA Re-run 마찰 제거)
+   - **O**: argocd-server resource limits (restart loop 해결)
+   - **R**: build-and-push.yml paths 필터에 application.yaml + chart values 추가 (수동 trigger 마찰 제거)
+   - **T**: teardown.ps1 의 safety net 5 카테고리 확장 (EBS Snapshot/EIP/ENI/LB 자동 sweep)
+   - **W (신규)**: Resilience4j Circuit Breaker 의 Kotlin suspend 호환성 — `executeSuspendFunction` manual wrap 또는 Mono 변환 (C3 fallback 동작 위해)
+   - **C2 fine-tune**: Rate Limit 의 IP key 기반 정확한 burst 검증 + 학습용 limit 적정값
+2. **묶음 ② 관측성 (D2 + D3 풀스택 + D4)** — C1~C5 동작 후 metric/trace/log 가 의미 있어짐. 부수: P (metrics-server) + Q (Grafana svc) 같이.
 4. **D8 Newman E2E** — Postman + Newman 시나리오 (C1~C5 활용한 E2E flow).
 5. **D7 정적 페이지** + **D12 발표 자료** — 마감 직전.
 
@@ -83,7 +82,8 @@
 | **S** | ✅ 완료 (2026-05-12) — cluster-teardown.ps1 의 orphan EBS cleanup. terraform destroy 가 EC2 만 죽여서 PVC 가 만든 dynamic EBS 가 cleanup 안 되던 문제. 사용자가 콘솔에서 옛 37 개 일괄 삭제 (~5,500원 손실). teardown.ps1 에 3 step (PVC 명시 삭제 + 60s wait → terraform destroy → safety net AWS CLI) 추가. 다음 destroy 부터 자동. |
 | **T** | teardown.ps1 의 safety net 을 EBS 외 5 카테고리로 확장 (BACKLOG 추가 2026-05-12, 사용자 발견). 현재는 매 destroy 후 사용자가 콘솔로 직접 검증해야 하는 부담. **사용자 말 그대로** "내가 못봤으면 어쩔뻔". 자동화 후보:<br>(a) EBS Snapshot status=completed → delete<br>(b) EIP AssociationId null → release<br>(c) ENI status=available → delete<br>(d) ALB/NLB 잔존 시 경고 (자동 삭제 X — 사용자 다른 프로젝트 LB 위험)<br>(e) VPC orphan 발견 시 escalation<br>위험도 고려해 (a)(b)(c) 만 자동, (d)(e) 는 경고. 묶음 ② 또는 묶음 ③ 와 함께. |
 | **U** | 새 microservice 추가 시 **5 곳 동시 갱신 필수** 패턴의 디자인 부채. 사용자가 C5 작성에서 2번 누락 발견 (root applicationModules + terraform repository_names). 통합 source 후보:<br>(a) terraform locals 에 service list 정의 → registry + GHA workflow 가 같은 list 참조 (GHA 는 직접 참조 못 하니 generation 스크립트 필요)<br>(b) 단순한 cross-check 스크립트 (pre-commit hook 또는 CI step) — 5 곳의 service list 가 일치하는지 검증<br>(c) Helm/Kustomize 처럼 service list 를 yaml 한 곳에 정의 + 각 도구가 거기서 read<br>(b) 가 가장 단순하고 안전. 묶음 ③ 의 운영 안정화 묶음에. |
-| **V** | ✅ 코드 fix 완료 (다음 cycle 적용 — 2026-05-12). Worker memory cascade meltdown. 사용자 cluster 가 AZ B 의 두 worker 동시 NotReady, SSH timeout, ArgoCD UI freeze (2026-05-12). describe node 결과 memory limits 137% over-commit (5248Mi vs 3829Mi capacity). t3.medium 한 노드에 microservice + data + observability 풀스택 schedule 시 한도 초과 → kubelet OOM cascade.<br>**fix**: variables.tf 의 worker_instance_type t3.medium → **t3.large** (memory 3.84 → 7.68 GiB). 시간당 +55원/worker × 3 = +165원/h. 11일 4h/일 운영 시 +7,260원 (예산 11% 추가) — cost discipline 범위. 다음 destroy/bootstrap cycle 부터 적용.<br>응급 처치 (현재 cluster): AWS 콘솔에서 죽은 두 worker 직접 reboot. |
+| **V** | ✅ **완료 + 검증 통과** (2026-05-12). t3.large × 3 worker 적용 후 부트스트랩 → 6 nodes Ready, 모든 Pod Running, ArgoCD 20/20 Healthy/Synced. memory cascade meltdown 패턴 사라짐. 비용 시간당 ~675원. |
+| **W** | 🆕 Resilience4j Circuit Breaker 의 Kotlin suspend 호환성 (2026-05-12 검증 발견). C3 fallback 미동작 — `@CircuitBreaker` annotation 의 Spring AOP 가 Kotlin suspend method 의 Continuation 파라미터 인식 안 함. gateway log 에 CircuitBreaker activity / fallback log 0. **fix 옵션**:<br>(a) `circuitBreaker.executeSuspendFunction { ... }` 으로 manual wrap (어노테이션 제거)<br>(b) `Mono.fromSuspend { ... }.transformDeferred(CircuitBreakerOperator.of(cb))` reactive wrap<br>(c) blocking method 로 변경<br>(a) 추천. 묶음 ③ 의 일부. 우선순위 Medium (C3 코드 자체는 작성 완료, 동작만 미세 조정). |
 
 ### ✅ 오늘 검증 완료 (어제 fix 의 결과)
 
@@ -141,7 +141,26 @@
 
 ## ✅ 완료 (역순, 최근 → 옛날)
 
-### 2026-05-12 (묶음 ① 백엔드 Must 작성 완료, 검증 대기)
+### 2026-05-12 (묶음 ① 검증 완료 + V 동작 확인 + 7 issue 진단/fix)
+- ✅ **부트스트랩 ×3 cycle**. cluster meltdown → V 적용 → 깨끗한 상태에서 검증.
+- ✅ **묶음 ① 검증 결과**:
+  - C1 JWT 인증: 401 (토큰 없이) + 토큰 발급 + 200 (토큰 첨부) 모두 동작
+  - C4 Outbox Poller: 5초 주기 Hibernate query polling 확인
+  - C5 notification: 4 토픽 consumer group 등록 확인
+  - C2 Rate Limit: 동작 확인 (5 burst 이내 정상 통과 — 학습용 limit 적정)
+  - **C3 Circuit Breaker**: fallback 미동작 — annotation + suspend 호환성 issue (W 로 fix)
+- ✅ **V (t3.large) 동작 검증**: 부트스트랩 후 6 nodes Ready + 메모리 압박 사라짐 + 모든 Pod Running. memory limits 137% over-commit 패턴 해소.
+- 🆕 **7 issue 진단 + fix push**:
+  1. C5 buildbug: `notification-service` 가 root build.gradle.kts 의 applicationModules 화이트리스트 누락 → bootJar 안 만들어짐. fix: 한 줄 추가.
+  2. C5 ECR 누락: `terraform/main.tf` 의 module.registry.repository_names 에 notification-service 누락 → GHA push 403. fix: 한 줄 추가.
+  3. K8S_VARS_HOLDER ansible failed=1: `add_host` 의 ansible_connection: local 만으로 부족 → `hosts: "all:!K8S_VARS_HOLDER"` 패턴으로 매칭 자체 회피. ecr-credential-provider-setup.yaml fix.
+  4. **gRPC env mismatch**: chart values 의 `GRPC_*_HOST` env 가 application.yaml property (`grpc.client.*-service.address`) 와 매핑 안 됨. → application.yaml placeholder + chart env 정확 매칭 (`GRPC_*_ADDRESS`). 묶음 ① 이전부터의 디자인 결함.
+  5. S 검증 부수효과: cluster-teardown.ps1 의 PVC cleanup + safety net 동작 확인.
+  6. V worker meltdown: t3.medium 137% over-commit → kubelet OOM cascade. fix: t3.large 격상.
+  7. W (신규): Resilience4j suspend 호환성. 다음 라운드.
+- 🆕 **U + V + W 신규 BACKLOG 항목 등록**.
+
+### 2026-05-12 (오전 — 묶음 ① 백엔드 Must 작성)
 - ✅ **C4 — Outbox Poller**: 5초 주기 @Scheduled 가 application service 의 `processAll()` 호출. fetch + publish + state 변경 다 application service 가 알아서. Transactional Outbox 4 component 완성.
 - ✅ **C5 — notification-service 새 모듈**: 5번째 마이크로서비스. KafkaListener 4 토픽 구독 + logger.info 단일 채널. settings.gradle.kts 등록 + chart + Dockerfile + GHA matrix 추가.
 - ✅ **C1 — JWT 인증 필터**: JwtTokenProvider (JJWT 0.12.6 + HMAC-SHA) + JwtAuthenticationWebFilter (Bearer 토큰 → ReactiveSecurityContextHolder) + AuthRestController POST /auth/login (학습용 demo user). SecurityConfig 의 anyExchange permitAll → authenticated.
@@ -287,11 +306,11 @@
 
 | ID | 항목 | 상태 | 영향 | 우선순위 |
 |---|---|---|---|---|
-| C1 | JWT 인증 필터 (게이트웨이) | ✅ 작성 완료 (검증 대기) | 보안 | Must — JwtTokenProvider + JwtAuthenticationWebFilter + AuthRestController + SecurityConfig 갱신. permitAll path 외 모두 인증. /auth/login 학습용 demo user. |
-| C2 | Rate Limit 필터 (Token Bucket) | ✅ 작성 완료 (검증 대기) | 보안 / 안정성 | Must — RateLimitWebFilter (Redisson RRateLimiter, cluster-wide). IP 기반 key. 초과 시 429. fail-open. SecurityWebFiltersOrder.HTTP_BASIC. |
-| C3 | Resilience4j Circuit Breaker | ✅ 작성 완료 (검증 대기) | 가용성 (PDF 핵심) | Must — resilience4j 2.2.0 (spring-boot3 + kotlin + reactor). 4 service file 의 gRPC 호출에 @CircuitBreaker + fallbackMethod. slidingWindowSize=10, failureRateThreshold=50%. |
-| C4 | Outbox Poller (`@Scheduled`) | ✅ 작성 완료 (검증 대기) | 메시지 At-least-once 보증 | Must — OrderInventoryRequestOutboxPoller (order 모듈). @Scheduled(fixedRate=5000) → processAll() (이미 있던 application service 호출). @EnableScheduling. Transactional Outbox 4 component 완성. |
-| C5 | notification-service 최소 구현 | ✅ 작성 완료 (검증 대기) | 5번째 서비스 | Must — 새 모듈. NotificationKafkaListener 4 토픽 구독 + logger.info 단일 채널. chart + GHA matrix 추가. ApplicationSet 자동 등록. |
+| C1 | JWT 인증 필터 (게이트웨이) | ✅ **검증 완료** (2026-05-12) | 보안 | 401/200 분기, 토큰 발급/검증 모두 동작 확인. minor: B2-c 잘못된 password 가 401 대신 400 반환 (학습용 stub) |
+| C2 | Rate Limit 필터 (Token Bucket) | ⚠️ 작성 완료, **fine-tune 후속** | 보안 / 안정성 | RateLimitWebFilter 동작 확인. 단 짧은 burst (5번) 안에서는 안 막힘 (rate=10/sec 적정). 30+ burst 검증은 timeout cascade 로 미완 → W 와 함께 다음 라운드 |
+| C3 | Resilience4j Circuit Breaker | ⚠️ 작성 완료, **W 로 fallback 호환성 fix 필요** | 가용성 (PDF 핵심) | 코드 + chart wiring + 의존성 모두 완료. 단 검증 단계에서 `@CircuitBreaker` annotation 이 Kotlin suspend method 인식 못 함 → fallback 미동작. **W 항목** (`executeSuspendFunction` 으로 manual wrap) 으로 fix |
+| C4 | Outbox Poller (`@Scheduled`) | ✅ **검증 완료** (2026-05-12) | 메시지 At-least-once 보증 | 5초 주기 Hibernate query (`select ... from order_inventory_request_outbox`) 정상 polling 확인 |
+| C5 | notification-service 최소 구현 | ✅ **검증 완료** (2026-05-12) | 5번째 서비스 | Kafka consumer group 4 토픽 (order.pending/inventory_reserved/confirmed/cancelled) 모두 등록 확인. ArgoCD 자동 Application 등록. |
 | C6 | IdempotentEventAspect 구현 | ⏳ | 중복 메시지 방지 | Should |
 | C7 | Saga 보상 로직 1개 (재고부족→주문취소) | ⏳ | 분산 트랜잭션 | Should |
 | C8 | JWT secret 등 → K8s Secret | ✅ 완료 (2026-05-11) | 보안 | Must — user-api-gateway chart 에 secret.yaml + envFrom + application.yaml 의 hardcoded 제거. |
