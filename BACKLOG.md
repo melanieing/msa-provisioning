@@ -1,6 +1,6 @@
 # Market Service MSA — 백로그 & 진행 상황
 
-> **마지막 갱신**: 2026-05-12
+> **마지막 갱신**: 2026-05-13
 > 단일 진실 원천(SSOT). 작업 시작/완료 시 여기 갱신.
 
 ---
@@ -11,8 +11,8 @@
 |---|---|
 | **마감일** | 2026-05-20 |
 | **남은 일수** | 9일 |
-| **현재 위치** | **묶음 ① 검증 완료 + V (t3.large) 동작 확인**. 부트스트랩 ×3 cycle 진행 중 발견된 7 issue (C5 buildbug, C5 ECR 누락, K8S_VARS_HOLDER, gRPC env mismatch, S orphan EBS, V worker meltdown, C3 suspend 호환성) 모두 진단 + 5/7 fix push. ArgoCD 20/20 Healthy/Synced + 모든 Pod Running 검증 완료. 클러스터 destroy 됨. |
-| **진행률** | Phase A 95% (A5/A6 완료, A4/A++/A++b 잔여), **Phase B 100%** (microservice 다 검증), **Phase C 80%** ⬆ (C1+C4+C5+C8 ✅, C2/C3 fine-tune 후속, C6/C7 Should 잔여), **Phase D 85%** (D1 + D11 + D3 partial 완료) |
+| **현재 위치** | **묶음 (b) 일부 검증 + D2 fail (X 신규)**. R/O/T/W + B-2g/D2/D3/D4 push. 검증: O ✅ (argocd-server RESTARTS=0), D3 ✅ (collector ready), D4 ✅ (Grafana ConfigMap 등록). D2 ❌ (Dockerfile ADD URL 처리 못함 → 5 microservice agent jar corrupt → 시작 fail). W/C2/C3 ⚠️ (D2 cascade 검증 못함). 다음 세션 = X fix 후 재검증 → A++ 라운드. 클러스터 살아있음. |
+| **진행률** | Phase A 95%, **Phase B 100%**, **Phase C 80%** (W/C2/C3 검증 D2 cascade), **Phase D 90%** ⬆ (D3+D4 검증 통과, D2 fix 필요) |
 | **AWS 비용 사용량** | 2026-05-12 cluster meltdown 디버깅 + V 적용 후 2 cycle 부트스트랩 ≈ ~3시간 운영 ≈ ~2,000원. 누적 ~10,000원 (예산 15%). 남은 56,000원 ≈ 80시간 운영 가능 (t3.large 시 ~75시간). |
 
 ### 다음 우선순위 (순서대로)
@@ -83,7 +83,8 @@
 | **T** | ✅ 작성 완료 (2026-05-12) — cluster-teardown.ps1 의 Step 3/3 safety net 5 카테고리 확장. EBS / Snapshot / EIP / ENI 자동 sweep + LB 경고. 다음 destroy 부터 자동. PowerShell parser OK + BOM 239 187 191. |
 | **U** | 새 microservice 추가 시 **5 곳 동시 갱신 필수** 패턴의 디자인 부채. 사용자가 C5 작성에서 2번 누락 발견 (root applicationModules + terraform repository_names). 통합 source 후보:<br>(a) terraform locals 에 service list 정의 → registry + GHA workflow 가 같은 list 참조 (GHA 는 직접 참조 못 하니 generation 스크립트 필요)<br>(b) 단순한 cross-check 스크립트 (pre-commit hook 또는 CI step) — 5 곳의 service list 가 일치하는지 검증<br>(c) Helm/Kustomize 처럼 service list 를 yaml 한 곳에 정의 + 각 도구가 거기서 read<br>(b) 가 가장 단순하고 안전. 묶음 ③ 의 운영 안정화 묶음에. |
 | **V** | ✅ **완료 + 검증 통과** (2026-05-12). t3.large × 3 worker 적용 후 부트스트랩 → 6 nodes Ready, 모든 Pod Running, ArgoCD 20/20 Healthy/Synced. memory cascade meltdown 패턴 사라짐. 비용 시간당 ~675원. |
-| **W** | ✅ 작성 완료, 검증 대기 (2026-05-12) — 4 service file (Product/Order Query+Command, Inventory Query) 의 @CircuitBreaker annotation 제거 + resilience4j-kotlin 의 `executeSuspendFunction` extension 으로 manual wrap. runCatching + getOrElse 패턴으로 fallback 명시. CircuitBreakerRegistry constructor inject. gradle BUILD SUCCESSFUL. |
+| **W** | ⚠️ 작성 완료, **검증 못 함** (2026-05-13, D2 cascade) — gradle BUILD SUCCESSFUL. 단 microservice 가 OTel agent corrupt 로 시작 자체 fail → CB fallback 검증 불가. **X fix 후 재검증**. |
+| **X** | 🆕 **D2 Dockerfile OTel agent jar 다운로드 실패** (2026-05-13). 증상: 5 microservice 다 `Error opening zip file or JAR manifest missing : /opt/otel/otel-agent.jar` startup fail. 원인: Docker BuildKit 의 `ADD <URL>` 가 GitHub releases redirect (S3-backed) 처리 못 함 — HTML 페이지 저장. **fix**: 5 Dockerfile 의 `ADD https://...` → `RUN mkdir -p /opt/otel && wget -O /opt/otel/otel-agent.jar https://...`. 우선순위 High — 다음 세션 첫 fix. |
 
 ### ✅ 오늘 검증 완료 (어제 fix 의 결과)
 
