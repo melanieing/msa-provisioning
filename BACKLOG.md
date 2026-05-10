@@ -11,7 +11,7 @@
 |---|---|
 | **마감일** | 2026-05-20 |
 | **남은 일수** | 7일 |
-| **현재 위치** | **X fix push 완료 (Dockerfile RUN wget) + Y 신규 (OTel exporter protocol mismatch)**. X 후 jar 다운로드는 정상이지만 agent default protocol = http/protobuf 가 4317 (gRPC port) 로 export → "Connection reset". Y fix = 5 chart values.yaml 에 `OTEL_EXPORTER_OTLP_PROTOCOL: grpc` 추가. 다음 세션 첫 작업 = Y fix push + Pod restart + 검증. 검증 후 → W/C2/C3/R/T 일괄 검증 → A++ 라운드. 클러스터 살아있음. |
+| **현재 위치** | **Z 신규 발견 (root cause) + Y/Z fix push 완료**. 검증 단계에서 Pod 가 X fix 후에도 동일 에러 → "이미지 캐시" 의심 → events 의 `"already present on machine"` 확인 → 5 chart 가 `pullPolicy: IfNotPresent` + `:latest` (anti-pattern) → kubelet 이 ECR 새 image 안 pull → broken jar 재사용. **Z fix = pullPolicy: Always** 로 5 chart 변경. ArgoCD sync → kubelet 매번 ECR digest 확인 → 새 image pull → X fix 진짜 반영. Y (OTel protocol) 도 같이 push 됨. 다음 = ArgoCD sync 후 검증 → W/C2/C3/R/T → A++ 라운드. |
 | **진행률** | Phase A 95%, **Phase B 100%**, **Phase C 80%** (W/C2/C3 검증 Y cascade), **Phase D 90%** (D3+D4 검증 통과, D2 = X fix 통과 + Y fix 대기) |
 | **AWS 비용 사용량** | 2026-05-12 cluster meltdown 디버깅 + V 적용 후 2 cycle 부트스트랩 ≈ ~3시간 운영 ≈ ~2,000원. 누적 ~10,000원 (예산 15%). 남은 56,000원 ≈ 80시간 운영 가능 (t3.large 시 ~75시간). |
 
@@ -144,7 +144,8 @@
 
 ## ✅ 완료 (역순, 최근 → 옛날)
 
-### 2026-05-13 (묶음 (b) 일부 검증 + X fix 적용 + Y 신규 발견)
+### 2026-05-13 (묶음 (b) 일부 검증 + X/Y/Z 3 신규 + 모두 fix push)
+- 🆕 **이슈 Z 발견 + fix push** (root cause of X 의 X fix 반영 안된 사례): X fix push + GHA build 통과했는데 Pod 가 동일 에러. events 의 `"already present on machine"` 메시지 발견 → 5 chart 의 `pullPolicy: IfNotPresent` + `:latest` (K8s docs 가 anti-pattern 이라 명시) → kubelet 이 ECR digest 확인 안 함 → worker node 의 캐시 broken jar 그대로 사용. **fix**: 5 chart values.yaml 의 `pullPolicy: IfNotPresent` → `Always`. K8s 의 default for `:latest` 가 원래 Always 인데 우리가 override 한 게 직접 원인. ArgoCD sync 후 새 RS 가 Always 정책 → 매번 ECR digest 비교 → 새 image 자동 pull. 학습 끝난 뒤 D1-e (git SHA tag) 도입 시 IfNotPresent 복귀.
 - ✅ **묶음 (b) 8 항목 push** (R/O/T/W + B-2g + D2/D3/D4): 어제 작성 push.
 - ✅ **부트스트랩 검증 결과**: O ✅ (argocd-server RESTARTS=0, restart loop 해소), D3 ✅ (collector "Everything is ready"), D4 ✅ (Grafana sidecar 가 2 ConfigMap 자동 import).
 - ❌ **D2 fail** → 🆕 **이슈 X 등록 + fix 완료**: Docker BuildKit 의 `ADD <URL>` 가 GitHub releases redirect (S3-backed) 처리 못 해서 HTML 응답 저장 → JVM `Error opening zip file or JAR manifest missing`. 5 Dockerfile 의 `ADD URL` → `RUN wget -q -O ... && test -s ...` 로 변경. push 완료 (af75969 + 7aba07c). GHA build 통과.
@@ -396,7 +397,8 @@ Day 13  (5/20)     : 발표
 
 | 일자 | 변경 |
 |---|---|
-| 2026-05-13 | 이슈 Y 신규 — OTel Java agent default protocol (http/protobuf) ↔ endpoint 4317 (gRPC) mismatch. 5 chart values.yaml 에 `OTEL_EXPORTER_OTLP_PROTOCOL: grpc` 추가 (push 대기). |
+| 2026-05-13 | **이슈 Z root cause** — 5 chart 의 `pullPolicy: IfNotPresent` + `:latest` anti-pattern 으로 X fix push 후에도 worker node 캐시 이미지 (broken jar) 그대로. fix: 5 chart `pullPolicy: Always`. K8s default for `:latest` 복원. |
+| 2026-05-13 | 이슈 Y 신규 — OTel Java agent default protocol (http/protobuf) ↔ endpoint 4317 (gRPC) mismatch. 5 chart values.yaml 에 `OTEL_EXPORTER_OTLP_PROTOCOL: grpc` 추가. |
 | 2026-05-13 | 이슈 X 신규 + fix 완료 — D2 의 Dockerfile `ADD URL` 가 GitHub releases redirect 처리 못함. 5 Dockerfile `RUN wget -q -O ... && test -s ...` 로 변경 (af75969+7aba07c push). |
 | 2026-05-13 | 묶음 (b) 8 항목 push: R/O/T/W/B-2g/D2/D3/D4. 검증: O/D3/D4 통과, D2 fail (X 로 fix), W/C2/C3 검증 못함 (X+Y cascade). |
 | 2026-05-10 | 어제의 3개 sync 이슈 모두 fix: (A) platform-of-apps → 3 Apps (recurse:false), (B) apps-project Namespace whitelist, (C) 4 차트 serviceaccount.yaml whitespace trim 버그. 검증 대기. |
