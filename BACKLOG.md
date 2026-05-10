@@ -269,15 +269,14 @@
 | A1 | 거버넌스 (BACKLOG / Project tracking) | 🟡 진행 중 | 이 파일이 그것 |
 | A2 | Argo CD 매니페스트 리포 생성 | ✅ 완료 | melanieing/msa-argocd-manifest |
 | A3 | Terraform variables.tf 변수화 | ✅ 완료 | 13개 변수, zero drift |
-| A4 | Terraform S3 backend + DynamoDB lock | ⏳ 미진행 | 팀 협업 / DR 신뢰성. 1인 학습 프로젝트라 우선순위 ↓ |
+| A4 | Terraform S3 backend + **S3 native locking** (`use_lockfile=true`) | ⏳ **Must — 팀 협업 진입 시 (가장 마지막)** | 이 프로젝트는 추후 3인 팀 협업 전환 예정 → state 공유 필수. **DynamoDB lock 안 씀** (deprecated). Terraform 1.10+ 의 S3 conditional write 기반 native locking 사용 — DynamoDB 테이블 추가 비용/복잡도 0. 마감 직전 (D12 발표 자료 작성 후) 또는 발표 후 팀 합류 직전 도입. |
 | A5 | KMS CMK + EBS/EFS/S3 SSE 암호화 | ✅ 완료 (2026-05-11) | EBS (어제 H fix) + ECR (D1-a) + EFS (오늘 storage 모듈에 KMS key 추가). S3 는 D7 (정적 페이지) 작업 시 같은 패턴으로 추가 예정. |
 | A6 | VPC Endpoint (S3, KMS) | ✅ 완료 (2026-05-11) | network 모듈에 S3 gateway endpoint (무료) + KMS interface endpoint (~38원/h × 2 AZ) + 전용 SG 추가. private_dns_enabled 로 SDK 코드 변경 0. |
 | A7 | EC2 stop/start/bootstrap/teardown 스크립트 | ✅ 완료 | 5종 PowerShell 스크립트 |
 | A8 | Ansible argocd_namespace 변수 + URL fix | ✅ 완료 | 외부 레포 수정으로 사용자가 진행 |
 | A9 | **Spring Boot 3.3.0 → 3.5.14 업그레이드** | ✅ **완료** (2026-05-08) | + Cloud Gateway 4.1.9→4.3.0, multi-module bootJar 설정 정리, gradle wrapper 누락 fix |
 | A10 | **4개 서비스 Dockerfile** + 멀티스테이지 빌드 | ✅ 완료 (2026-05-08) | layered jar + non-root + healthcheck. notification-service 는 모듈 자체 미존재라 제외. |
-| A+ | NAT Gateway 1개로 줄이기 (선택) | ⏳ 검토 | 시간당 60원 절감. HA 손해. 4h/일 운영 시 사실상 불필요 |
-| A++ | `ktcloud-cluster-node-role` IAM Role 도 Terraform 자동화 | ⏳ 검토 (낮은 우선순위) | 현재는 사용자가 콘솔/CLI 로 수동 생성. 자동화하면 destroy/bootstrap 더 깨끗. LBC IAM 정책 JSON 인라인 또는 data 로 fetch. |
+| A++ | `ktcloud-cluster-node-role` IAM Role 도 Terraform 자동화 | ⏳ 다음 라운드 | 현재는 사용자가 콘솔/CLI 로 수동 생성. 자동화하면 destroy/bootstrap 더 깨끗. LBC IAM 정책 JSON 인라인 또는 data 로 fetch. |
 
 ---
 
@@ -358,6 +357,7 @@
 | AlertManager → PagerDuty | 운영 단계가 아님 |
 | React 풀앱 프론트엔드 | DevOps 포트폴리오 우선순위 ↓ — 정적 placeholder 만 |
 | Multi-channel notification (SMS/푸시) | 단일 채널 (이메일/로그) 만 |
+| **A+ NAT Gateway 1개로 줄이기** | AWS best practice = multi-AZ NAT (각 AZ 1개) — single point of failure 회피. 시간당 ~60원 절감만 목적이면 HA 손해가 큼. 사용자 결정 (2026-05-13) — 60원은 크지 않음. |
 | k6 부하 테스트 | 시연만 가능하면 보너스 |
 
 ---
@@ -396,6 +396,8 @@ Day 13  (5/20)     : 발표
 
 | 일자 | 변경 |
 |---|---|
+| 2026-05-13 | A4 description 갱신 — DynamoDB lock 제거, S3 native locking (`use_lockfile=true`, Terraform 1.10+) 로 변경. 우선순위: Must (팀 협업 진입 시 마지막). 근거: AWS S3 의 conditional write 지원 + DynamoDB backend 가 deprecated. |
+| 2026-05-13 | A+ (NAT Gateway 1개) → Won't 이동. AWS best practice = multi-AZ NAT, 시간당 60원 절감만 목적이면 HA 손해 큼. |
 | 2026-05-13 | T 검증 통과 — teardown 시 17 orphan EBS volume 자동 sweep 동작. PVC 가 만든 EBS 가 terraform destroy 만으론 안 청소되는 case 정확히 처리. |
 | 2026-05-13 | **이슈 Z root cause** — 5 chart 의 `pullPolicy: IfNotPresent` + `:latest` anti-pattern 으로 X fix push 후에도 worker node 캐시 이미지 (broken jar) 그대로. fix: 5 chart `pullPolicy: Always`. K8s default for `:latest` 복원. |
 | 2026-05-13 | 이슈 Y 신규 — OTel Java agent default protocol (http/protobuf) ↔ endpoint 4317 (gRPC) mismatch. 5 chart values.yaml 에 `OTEL_EXPORTER_OTLP_PROTOCOL: grpc` 추가. |
