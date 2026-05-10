@@ -82,6 +82,7 @@
 | **R** | build-and-push.yml paths 필터에 `**/application.yaml` 추가 — 단독 yaml 변경 시 build trigger 안 됨. 오늘 D11 commit 의 paths 매칭으로 우연히 해결됐지만 영구 fix 필요. | Low |
 | **S** | ✅ 완료 (2026-05-12) — cluster-teardown.ps1 의 orphan EBS cleanup. terraform destroy 가 EC2 만 죽여서 PVC 가 만든 dynamic EBS 가 cleanup 안 되던 문제. 사용자가 콘솔에서 옛 37 개 일괄 삭제 (~5,500원 손실). teardown.ps1 에 3 step (PVC 명시 삭제 + 60s wait → terraform destroy → safety net AWS CLI) 추가. 다음 destroy 부터 자동. |
 | **T** | teardown.ps1 의 safety net 을 EBS 외 5 카테고리로 확장 (BACKLOG 추가 2026-05-12, 사용자 발견). 현재는 매 destroy 후 사용자가 콘솔로 직접 검증해야 하는 부담. **사용자 말 그대로** "내가 못봤으면 어쩔뻔". 자동화 후보:<br>(a) EBS Snapshot status=completed → delete<br>(b) EIP AssociationId null → release<br>(c) ENI status=available → delete<br>(d) ALB/NLB 잔존 시 경고 (자동 삭제 X — 사용자 다른 프로젝트 LB 위험)<br>(e) VPC orphan 발견 시 escalation<br>위험도 고려해 (a)(b)(c) 만 자동, (d)(e) 는 경고. 묶음 ② 또는 묶음 ③ 와 함께. |
+| **U** | 새 microservice 추가 시 **5 곳 동시 갱신 필수** 패턴의 디자인 부채. 사용자가 C5 작성에서 2번 누락 발견 (root applicationModules + terraform repository_names). 통합 source 후보:<br>(a) terraform locals 에 service list 정의 → registry + GHA workflow 가 같은 list 참조 (GHA 는 직접 참조 못 하니 generation 스크립트 필요)<br>(b) 단순한 cross-check 스크립트 (pre-commit hook 또는 CI step) — 5 곳의 service list 가 일치하는지 검증<br>(c) Helm/Kustomize 처럼 service list 를 yaml 한 곳에 정의 + 각 도구가 거기서 read<br>(b) 가 가장 단순하고 안전. 묶음 ③ 의 운영 안정화 묶음에. |
 
 ### ✅ 오늘 검증 완료 (어제 fix 의 결과)
 
