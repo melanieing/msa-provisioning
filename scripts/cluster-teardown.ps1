@@ -106,27 +106,102 @@ try {
 }
 Write-Host ""
 
-# ─── Step 3/3: Safety net — orphan EBS sweep (Issue S) ─────────────
-# Step 1 이 실패했거나 cluster 가 처음부터 없었다면 PVC 가 만든 EBS 는 여전히 'available'.
-# 이 step 이 마지막 안전망 — status=available 인 모든 EBS 일괄 삭제.
-# (in-use 상태 EBS 는 어떤 EC2 에 attached — 우리는 EC2 다 destroy 후라 0개 expected.)
-Write-Host "[3/3] Safety net — sweeping orphan EBS volumes..." -ForegroundColor Cyan
+# ─── Step 3/3: Safety net — 5 카테고리 orphan sweep (Issue S + T) ──
+# terraform destroy 가 모르는 K8s 동적 리소스 + race condition orphan 자동 정리.
+# T (2026-05-12 추가): EBS 외 4 카테고리 추가:
+#   (a) EBS Snapshot — completed 상태 자동 삭제
+#   (b) EIP — AssociationId 비어있는 (= 어떤 NAT/EC2 와도 연결 안 됨) 자동 release
+#   (c) ENI — status=available (= attached 안 됨) 자동 삭제
+#   (d) ALB/NLB — 잔존 시 경고만 (자동 삭제 위험 — 사용자 다른 프로젝트 LB 가능)
+#   (e) VPC orphan — 발견 시 escalation
+Write-Host "[3/3] Safety net — orphan sweep (5 categories)..." -ForegroundColor Cyan
+
+# ─── (1) EBS volumes (Issue S) ─────────────────────────────────────
+Write-Host "      (1/5) EBS volumes (status=available)..." -ForegroundColor Cyan
 $Orphans = aws ec2 describe-volumes `
     --region $AwsRegion `
     --filters "Name=status,Values=available" `
     --query "Volumes[*].VolumeId" `
     --output text 2>$null
-
 if ($Orphans) {
     $OrphanIds = $Orphans -split '\s' | Where-Object { $_ }
-    Write-Host "      Found $($OrphanIds.Count) orphan volume(s) — deleting..." -ForegroundColor Yellow
+    Write-Host "            Found $($OrphanIds.Count) orphan volume(s) — deleting..." -ForegroundColor Yellow
     foreach ($vol in $OrphanIds) {
-        Write-Host "        delete $vol"
         aws ec2 delete-volume --volume-id $vol --region $AwsRegion 2>&1 | Out-Null
     }
 } else {
-    Write-Host "      No orphan EBS volumes — clean." -ForegroundColor Green
+    Write-Host "            None." -ForegroundColor Green
 }
+
+# ─── (2) EBS Snapshots ─────────────────────────────────────────────
+# 학습용 — 우리가 명시 만든 snapshot 없으니 발견 시 모두 삭제 OK.
+Write-Host "      (2/5) EBS Snapshots (owner=self)..." -ForegroundColor Cyan
+$Snapshots = aws ec2 describe-snapshots `
+    --region $AwsRegion `
+    --owner-ids self `
+    --query "Snapshots[*].SnapshotId" `
+    --output text 2>$null
+if ($Snapshots) {
+    $SnapIds = $Snapshots -split '\s' | Where-Object { $_ }
+    Write-Host "            Found $($SnapIds.Count) snapshot(s) — deleting..." -ForegroundColor Yellow
+    foreach ($snap in $SnapIds) {
+        aws ec2 delete-snapshot --snapshot-id $snap --region $AwsRegion 2>&1 | Out-Null
+    }
+} else {
+    Write-Host "            None." -ForegroundColor Green
+}
+
+# ─── (3) EIP unassociated ──────────────────────────────────────────
+# AssociationId 가 비어있는 EIP 만 release (다른 NAT/EC2 가 사용 중이면 보존).
+Write-Host "      (3/5) EIPs (unassociated)..." -ForegroundColor Cyan
+$Eips = aws ec2 describe-addresses `
+    --region $AwsRegion `
+    --query "Addresses[?!AssociationId].AllocationId" `
+    --output text 2>$null
+if ($Eips) {
+    $EipIds = $Eips -split '\s' | Where-Object { $_ }
+    Write-Host "            Found $($EipIds.Count) unassociated EIP(s) — releasing..." -ForegroundColor Yellow
+    foreach ($eip in $EipIds) {
+        aws ec2 release-address --allocation-id $eip --region $AwsRegion 2>&1 | Out-Null
+    }
+} else {
+    Write-Host "            None." -ForegroundColor Green
+}
+
+# ─── (4) ENIs (status=available) ───────────────────────────────────
+Write-Host "      (4/5) ENIs (status=available)..." -ForegroundColor Cyan
+$Enis = aws ec2 describe-network-interfaces `
+    --region $AwsRegion `
+    --filters "Name=status,Values=available" `
+    --query "NetworkInterfaces[*].NetworkInterfaceId" `
+    --output text 2>$null
+if ($Enis) {
+    $EniIds = $Enis -split '\s' | Where-Object { $_ }
+    Write-Host "            Found $($EniIds.Count) orphan ENI(s) — deleting..." -ForegroundColor Yellow
+    foreach ($eni in $EniIds) {
+        aws ec2 delete-network-interface --network-interface-id $eni --region $AwsRegion 2>&1 | Out-Null
+    }
+} else {
+    Write-Host "            None." -ForegroundColor Green
+}
+
+# ─── (5) ALB/NLB 경고 (자동 삭제 X — 위험) ─────────────────────────
+# K8s LBC 가 만든 LB 가 남아있으면 destroy 후에도 시간당 30원/each 누적.
+# 단 자동 삭제는 위험 — 사용자 다른 프로젝트 LB 가 같은 region 에 있을 수도.
+# 발견 시 경고만 출력. 사용자가 콘솔에서 직접 확인 후 삭제.
+Write-Host "      (5/5) Load Balancers (warning only)..." -ForegroundColor Cyan
+$Lbs = aws elbv2 describe-load-balancers `
+    --region $AwsRegion `
+    --query "LoadBalancers[*].[LoadBalancerName,Type,State.Code]" `
+    --output text 2>$null
+if ($Lbs) {
+    Write-Host "            ⚠️  Found Load Balancer(s) — manual review needed:" -ForegroundColor Yellow
+    Write-Host "$Lbs" -ForegroundColor Yellow
+    Write-Host "            (auto-delete skipped — could be unrelated)" -ForegroundColor Yellow
+} else {
+    Write-Host "            None." -ForegroundColor Green
+}
+
 Write-Host ""
 
 Write-Host "============================================================" -ForegroundColor Green
