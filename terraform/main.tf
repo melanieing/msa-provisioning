@@ -94,7 +94,14 @@ module "storage" {
 }
 
 
-# ─── 6. 컨테이너 이미지 레지스트리 (ECR ×4 + KMS + lifecycle) ─────
+# ─── 6. 컨테이너 이미지 레지스트리 (ECR ×5 + KMS + lifecycle) ─────
+# ⚠️ 새 microservice 추가 시 5 곳 동시 갱신 필요 (디자인 부채):
+#   1. settings.gradle.kts 의 include(...)
+#   2. root build.gradle.kts 의 applicationModules set
+#   3. <service>/Dockerfile 의 모듈 COPY list
+#   4. .github/workflows/build-and-push.yml 의 matrix.service
+#   5. 여기 (terraform repository_names)
+# 향후 BACKLOG 의 새 항목으로 통합 source 검토 가치.
 module "registry" {
   source = "./modules/registry"
 
@@ -104,6 +111,7 @@ module "registry" {
     "product-service",
     "order-service",
     "inventory-service",
+    "notification-service",                  # C5 (2026-05-12 추가)
   ]
 }
 
