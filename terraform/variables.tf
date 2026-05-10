@@ -117,9 +117,22 @@ variable "master_instance_type" {
 }
 
 variable "worker_instance_type" {
-  description = "K8s 워커 노드 EC2 타입. 3대 띄움."
+  description = <<-EOT
+    K8s 워커 노드 EC2 타입. 3대 띄움.
+
+    ⚠️ Issue V (2026-05-12): t3.medium (3.84 GiB memory) 로는 microservice 5 + data layer
+    + observability 풀스택을 한 노드에 schedule 할 때 memory limits 합 5248Mi (= 137%
+    over-commit) → kubelet OOM 으로 노드 NotReady cascade.
+
+    학습용 mitigation: t3.large 로 격상 (memory 3.84 → 7.68 GiB, 시간당 ~55원 → ~110원).
+    cluster 시간당 비용 ~510원 → ~675원 (3 worker 격상). 4h/일 × 11일 = +7,260원.
+    예산 66,000원 의 ~11% 추가. cost discipline 범위 안.
+
+    더 저렴한 대안: worker 1대 추가 (3 → 4) — 시간당 ~50원 추가. 단 over-commit 자체는
+    줄지만 한 노드의 메모리 부족 패턴은 그대로. t3.large 격상이 더 robust.
+  EOT
   type        = string
-  default     = "t3.medium"
+  default     = "t3.large"
 }
 
 variable "bastion_instance_type" {
