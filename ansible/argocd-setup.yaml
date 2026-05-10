@@ -71,6 +71,44 @@
                 http: 30080
             extraArgs:
               - --insecure
+            # O (2026-05-12 추가) — argocd-server restart loop 해소.
+            # 기존: default ~256Mi limit + readinessProbe.timeoutSeconds=1 → 19+ Application
+            # 동시 sync 시 응답 늦어 readiness 9번 fail → SIGTERM cascade.
+            resources:
+              requests:
+                cpu: 100m
+                memory: 256Mi
+              limits:
+                cpu: 500m
+                memory: 1Gi              # 256Mi → 1Gi (4배). 19+ Application watch 여유.
+            readinessProbe:
+              timeoutSeconds: 10         # default 1초 → 10초 (응답 여유)
+              periodSeconds: 10
+              failureThreshold: 5        # default 3 → 5
+            livenessProbe:
+              timeoutSeconds: 10
+              periodSeconds: 30
+              failureThreshold: 5
+
+          # O — application controller 도 19+ Application reconcile 으로 메모리 ↑
+          controller:
+            resources:
+              requests:
+                cpu: 200m
+                memory: 512Mi
+              limits:
+                cpu: 1000m
+                memory: 2Gi              # default 보다 ↑
+
+          # O — repo server 도 git fetch/render 에 메모리 사용
+          repoServer:
+            resources:
+              requests:
+                cpu: 100m
+                memory: 256Mi
+              limits:
+                cpu: 500m
+                memory: 1Gi
 
     # ─── 5. CRD 등록 확인 (Application CRD 가 떠야 다음 task 가능) ─
     # Helm 설치는 Pod 띄우는 것까지인데, CRD(Application 같은 새 리소스 종류) 가 등록되는 데
