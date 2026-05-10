@@ -296,7 +296,7 @@
 | B-2d | **product-service Helm 차트** | ✅ **완료** (2026-05-08) | HTTP(8001) + gRPC(9001) 듀얼 포트. CNPG product-db 연결 |
 | B-2e | **order-service Helm 차트** | ✅ **완료** (2026-05-08) | HTTP(8002) + gRPC(9002). CNPG order-db + Strimzi Kafka |
 | B-2f | **inventory-service Helm 차트** | ✅ **완료** (2026-05-08) | HTTP(8003) + gRPC(9003). CNPG inventory-db + Kafka + Redis Cluster |
-| B-2g | notification-service Helm 차트 | ⏳ | `charts/services/notification-service/` (서비스 자체 미구현, 후순위) |
+| B-2g | notification-service Helm 차트 | ✅ 완료 (2026-05-12, C5 와 함께) | `charts/services/notification-service/` 신규 작성 — 단일 포트 (8004) chart 패턴 (gateway 와 동일). C5 의 새 모듈 + 검증 통과로 사실상 B-2 100%. |
 
 각 차트 골격: Chart.yaml + values.yaml + templates/{deployment,service,configmap,_helpers.tpl}
 
