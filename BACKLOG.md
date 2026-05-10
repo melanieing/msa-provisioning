@@ -10,23 +10,25 @@
 | 항목 | 값 |
 |---|---|
 | **마감일** | 2026-05-20 |
-| **남은 일수** | 9일 |
-| **현재 위치** | **묶음 (b) 일부 검증 + D2 fail (X 신규)**. R/O/T/W + B-2g/D2/D3/D4 push. 검증: O ✅ (argocd-server RESTARTS=0), D3 ✅ (collector ready), D4 ✅ (Grafana ConfigMap 등록). D2 ❌ (Dockerfile ADD URL 처리 못함 → 5 microservice agent jar corrupt → 시작 fail). W/C2/C3 ⚠️ (D2 cascade 검증 못함). 다음 세션 = X fix 후 재검증 → A++ 라운드. 클러스터 살아있음. |
-| **진행률** | Phase A 95%, **Phase B 100%**, **Phase C 80%** (W/C2/C3 검증 D2 cascade), **Phase D 90%** ⬆ (D3+D4 검증 통과, D2 fix 필요) |
+| **남은 일수** | 7일 |
+| **현재 위치** | **X fix push 완료 (Dockerfile RUN wget) + Y 신규 (OTel exporter protocol mismatch)**. X 후 jar 다운로드는 정상이지만 agent default protocol = http/protobuf 가 4317 (gRPC port) 로 export → "Connection reset". Y fix = 5 chart values.yaml 에 `OTEL_EXPORTER_OTLP_PROTOCOL: grpc` 추가. 다음 세션 첫 작업 = Y fix push + Pod restart + 검증. 검증 후 → W/C2/C3/R/T 일괄 검증 → A++ 라운드. 클러스터 살아있음. |
+| **진행률** | Phase A 95%, **Phase B 100%**, **Phase C 80%** (W/C2/C3 검증 Y cascade), **Phase D 90%** (D3+D4 검증 통과, D2 = X fix 통과 + Y fix 대기) |
 | **AWS 비용 사용량** | 2026-05-12 cluster meltdown 디버깅 + V 적용 후 2 cycle 부트스트랩 ≈ ~3시간 운영 ≈ ~2,000원. 누적 ~10,000원 (예산 15%). 남은 56,000원 ≈ 80시간 운영 가능 (t3.large 시 ~75시간). |
 
 ### 다음 우선순위 (순서대로)
 
-**다음 라운드 = 묶음 ③ 운영 안정화 (cycle 마찰 제거)**. 그 후 묶음 ② 관측성.
+**다음 세션 첫 작업 = Y fix (OTel protocol)** → Pod restart 검증 → 묶음 (b) 잔여 검증.
 
-1. **🔴 묶음 ③ — A++b + O + R + T + W + C2/C3 fine-tune**: cycle 효율 + suspend 호환성. 한 묶음으로:
-   - **A++b**: OIDC + IAM + ECR 영구화 (cycle 마다 GHA Re-run 마찰 제거)
-   - **O**: argocd-server resource limits (restart loop 해결)
-   - **R**: build-and-push.yml paths 필터에 application.yaml + chart values 추가 (수동 trigger 마찰 제거)
-   - **T**: teardown.ps1 의 safety net 5 카테고리 확장 (EBS Snapshot/EIP/ENI/LB 자동 sweep)
-   - **W (신규)**: Resilience4j Circuit Breaker 의 Kotlin suspend 호환성 — `executeSuspendFunction` manual wrap 또는 Mono 변환 (C3 fallback 동작 위해)
-   - **C2 fine-tune**: Rate Limit 의 IP key 기반 정확한 burst 검증 + 학습용 limit 적정값
-2. **묶음 ② 관측성 (D2 + D3 풀스택 + D4)** — C1~C5 동작 후 metric/trace/log 가 의미 있어짐. 부수: P (metrics-server) + Q (Grafana svc) 같이.
+1. **🔴 Y fix push** (작성 완료, push 대기): 5 chart values.yaml 에 `OTEL_EXPORTER_OTLP_PROTOCOL: grpc` 추가. ArgoCD 자동 sync → 5 deployment env 갱신 → Pod 자동 restart. 검증: agent log 에 "Connection reset" 사라지면 통과.
+2. **묶음 (b) 잔여 검증** (Y 통과 후):
+   - W: 4 service @CircuitBreaker → executeSuspendFunction wrap. product-service replicas=0 + 15 burst → CB-fallback log
+   - C2 fine-tune: 30+ burst → 일부 429
+   - C3: W 와 같이 검증
+   - R: 이번 push 가 paths 매칭으로 GHA 자동 trigger 됐는지 확인
+   - T: 다음 destroy 시 safety net 5 카테고리 출력 검증
+3. **A++ + A++b** (마지막 라운드, 사용자 의도): cluster-node-role 콘솔→terraform + OIDC/IAM/ECR 영구화
+4. **D8 Newman E2E** — Postman + Newman 시나리오 (C1~C5 활용한 E2E flow).
+5. **D7 정적 페이지** + **D12 발표 자료** — 마감 직전.
 4. **D8 Newman E2E** — Postman + Newman 시나리오 (C1~C5 활용한 E2E flow).
 5. **D7 정적 페이지** + **D12 발표 자료** — 마감 직전.
 
@@ -141,6 +143,13 @@
 ---
 
 ## ✅ 완료 (역순, 최근 → 옛날)
+
+### 2026-05-13 (묶음 (b) 일부 검증 + X fix 적용 + Y 신규 발견)
+- ✅ **묶음 (b) 8 항목 push** (R/O/T/W + B-2g + D2/D3/D4): 어제 작성 push.
+- ✅ **부트스트랩 검증 결과**: O ✅ (argocd-server RESTARTS=0, restart loop 해소), D3 ✅ (collector "Everything is ready"), D4 ✅ (Grafana sidecar 가 2 ConfigMap 자동 import).
+- ❌ **D2 fail** → 🆕 **이슈 X 등록 + fix 완료**: Docker BuildKit 의 `ADD <URL>` 가 GitHub releases redirect (S3-backed) 처리 못 해서 HTML 응답 저장 → JVM `Error opening zip file or JAR manifest missing`. 5 Dockerfile 의 `ADD URL` → `RUN wget -q -O ... && test -s ...` 로 변경. push 완료 (af75969 + 7aba07c). GHA build 통과.
+- 🆕 **이슈 Y 발견 + fix 작성** (push 대기): X 후 jar 다운로드는 정상이지만 agent log 에 `[OkHttp http://...:4317] ERROR HttpExporter ... Connection reset`. root cause: OTel Java agent default protocol = `http/protobuf` 인데 endpoint 는 4317 (gRPC port). fix: 5 chart values.yaml 에 `OTEL_EXPORTER_OTLP_PROTOCOL: grpc` 추가.
+- ⚠️ **W/C2/C3 검증 못함** (X+Y cascade): pod 가 안 떠서 실제 traffic 검증 불가. Y fix 후 재시도.
 
 ### 2026-05-12 (묶음 ① 검증 완료 + V 동작 확인 + 7 issue 진단/fix)
 - ✅ **부트스트랩 ×3 cycle**. cluster meltdown → V 적용 → 깨끗한 상태에서 검증.
@@ -387,6 +396,9 @@ Day 13  (5/20)     : 발표
 
 | 일자 | 변경 |
 |---|---|
+| 2026-05-13 | 이슈 Y 신규 — OTel Java agent default protocol (http/protobuf) ↔ endpoint 4317 (gRPC) mismatch. 5 chart values.yaml 에 `OTEL_EXPORTER_OTLP_PROTOCOL: grpc` 추가 (push 대기). |
+| 2026-05-13 | 이슈 X 신규 + fix 완료 — D2 의 Dockerfile `ADD URL` 가 GitHub releases redirect 처리 못함. 5 Dockerfile `RUN wget -q -O ... && test -s ...` 로 변경 (af75969+7aba07c push). |
+| 2026-05-13 | 묶음 (b) 8 항목 push: R/O/T/W/B-2g/D2/D3/D4. 검증: O/D3/D4 통과, D2 fail (X 로 fix), W/C2/C3 검증 못함 (X+Y cascade). |
 | 2026-05-10 | 어제의 3개 sync 이슈 모두 fix: (A) platform-of-apps → 3 Apps (recurse:false), (B) apps-project Namespace whitelist, (C) 4 차트 serviceaccount.yaml whitespace trim 버그. 검증 대기. |
 | 2026-05-08 | B-2d/e/f 3개 backend 차트 + B-2c 리팩터 (ports list 패턴, 4 charts 공통 templates). 4개 차트 lint 통과. |
 | 2026-05-08 | B-2c user-api-gateway Helm 차트 작성 (Chart.yaml + values.yaml + 5 templates). |
