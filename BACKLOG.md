@@ -11,24 +11,18 @@
 |---|---|
 | **마감일** | 2026-05-20 |
 | **남은 일수** | 7일 |
-| **현재 위치** | **Z 신규 발견 (root cause) + Y/Z fix push 완료**. 검증 단계에서 Pod 가 X fix 후에도 동일 에러 → "이미지 캐시" 의심 → events 의 `"already present on machine"` 확인 → 5 chart 가 `pullPolicy: IfNotPresent` + `:latest` (anti-pattern) → kubelet 이 ECR 새 image 안 pull → broken jar 재사용. **Z fix = pullPolicy: Always** 로 5 chart 변경. ArgoCD sync → kubelet 매번 ECR digest 확인 → 새 image pull → X fix 진짜 반영. Y (OTel protocol) 도 같이 push 됨. 다음 = ArgoCD sync 후 검증 → W/C2/C3/R/T → A++ 라운드. |
-| **진행률** | Phase A 95%, **Phase B 100%**, **Phase C 80%** (W/C2/C3 검증 Y cascade), **Phase D 90%** (D3+D4 검증 통과, D2 = X fix 통과 + Y fix 대기) |
+| **현재 위치** | **묶음 (b) 검증 완료 + X/Y/Z 3 신규 fix 모두 통과 + T 검증 통과 + teardown 완료**. 다음 라운드 = **A++ + A++b** (사용자 의도 마지막). 그 후 부트스트랩 → W/C2/C3/R 검증. T 검증: orphan EBS volume 17개 자동 sweep 동작 확인. |
+| **진행률** | Phase A 95%, **Phase B 100%**, **Phase C 80%** (W/C2/C3 다음 cycle traffic 검증), **Phase D 95%** ⬆ (D2/D3/D4 통과). |
 | **AWS 비용 사용량** | 2026-05-12 cluster meltdown 디버깅 + V 적용 후 2 cycle 부트스트랩 ≈ ~3시간 운영 ≈ ~2,000원. 누적 ~10,000원 (예산 15%). 남은 56,000원 ≈ 80시간 운영 가능 (t3.large 시 ~75시간). |
 
 ### 다음 우선순위 (순서대로)
 
-**다음 세션 첫 작업 = Y fix (OTel protocol)** → Pod restart 검증 → 묶음 (b) 잔여 검증.
+**다음 세션 = A++ + A++b** (사용자 의도 — 이번 라운드 마지막 콘솔 영구화).
 
-1. **🔴 Y fix push** (작성 완료, push 대기): 5 chart values.yaml 에 `OTEL_EXPORTER_OTLP_PROTOCOL: grpc` 추가. ArgoCD 자동 sync → 5 deployment env 갱신 → Pod 자동 restart. 검증: agent log 에 "Connection reset" 사라지면 통과.
-2. **묶음 (b) 잔여 검증** (Y 통과 후):
-   - W: 4 service @CircuitBreaker → executeSuspendFunction wrap. product-service replicas=0 + 15 burst → CB-fallback log
-   - C2 fine-tune: 30+ burst → 일부 429
-   - C3: W 와 같이 검증
-   - R: 이번 push 가 paths 매칭으로 GHA 자동 trigger 됐는지 확인
-   - T: 다음 destroy 시 safety net 5 카테고리 출력 검증
-3. **A++ + A++b** (마지막 라운드, 사용자 의도): cluster-node-role 콘솔→terraform + OIDC/IAM/ECR 영구화
-4. **D8 Newman E2E** — Postman + Newman 시나리오 (C1~C5 활용한 E2E flow).
-5. **D7 정적 페이지** + **D12 발표 자료** — 마감 직전.
+1. **🔴 A++ + A++b**: cluster-node-role 콘솔→terraform 자동화 + OIDC/IAM/ECR 영구화. cycle 마다 GHA Re-run 마찰 제거.
+2. **부트스트랩 검증** (A++ 작업 후 한 번에): W (CB fallback) + C2 (30 burst Rate Limit) + C3 (CB 통합) + R (GHA paths chart trigger).
+3. **D8 Newman E2E** — Postman + Newman 시나리오 (C1~C5 활용한 E2E flow).
+4. **D7 정적 페이지** + **D12 발표 자료** — 마감 직전.
 4. **D8 Newman E2E** — Postman + Newman 시나리오 (C1~C5 활용한 E2E flow).
 5. **D7 정적 페이지** + **D12 발표 자료** — 마감 직전.
 
@@ -144,9 +138,13 @@
 
 ## ✅ 완료 (역순, 최근 → 옛날)
 
-### 2026-05-13 (묶음 (b) 일부 검증 + X/Y/Z 3 신규 + 모두 fix push)
-- 🆕 **이슈 Z 발견 + fix push** (root cause of X 의 X fix 반영 안된 사례): X fix push + GHA build 통과했는데 Pod 가 동일 에러. events 의 `"already present on machine"` 메시지 발견 → 5 chart 의 `pullPolicy: IfNotPresent` + `:latest` (K8s docs 가 anti-pattern 이라 명시) → kubelet 이 ECR digest 확인 안 함 → worker node 의 캐시 broken jar 그대로 사용. **fix**: 5 chart values.yaml 의 `pullPolicy: IfNotPresent` → `Always`. K8s 의 default for `:latest` 가 원래 Always 인데 우리가 override 한 게 직접 원인. ArgoCD sync 후 새 RS 가 Always 정책 → 매번 ECR digest 비교 → 새 image 자동 pull. 학습 끝난 뒤 D1-e (git SHA tag) 도입 시 IfNotPresent 복귀.
-- ✅ **묶음 (b) 8 항목 push** (R/O/T/W + B-2g + D2/D3/D4): 어제 작성 push.
+### 2026-05-13 (묶음 (b) 검증 완료 + X/Y/Z 3 신규 모두 fix push 통과 + T 검증 통과)
+- ✅ **검증 결과 요약**: D2 (X+Y+Z cascade 통과로 5 service agent 정상) / O / D3 / D4 모두 통과. T = teardown 시 17 orphan EBS volume 자동 sweep 동작 확인.
+- 🆕 **이슈 Z 발견 + fix push + 검증 통과**: X fix push + GHA build 통과했는데 Pod 가 동일 에러. events 의 `"already present on machine"` 메시지 → 5 chart 의 `pullPolicy: IfNotPresent` + `:latest` (K8s docs anti-pattern) → kubelet 이 ECR digest 확인 안 함 → worker node 의 캐시 broken jar 그대로 사용. **fix**: 5 chart `pullPolicy: Always`. K8s default for `:latest` 가 원래 Always 인데 우리가 override 한 게 직접 원인. 검증: "Successfully pulled image ... in 10.01s" + 5 service Running.
+- 🆕 **이슈 Y 발견 + fix push + 검증 통과**: X 후 새 에러 — `[OkHttp http://...:4317] HttpExporter Connection reset`. OTel agent default protocol = http/protobuf 인데 endpoint 가 4317 (gRPC port). **fix**: 5 chart values.yaml 에 `OTEL_EXPORTER_OTLP_PROTOCOL: grpc`. 검증: agent log 의 ERROR 사라짐 + 5 service Running.
+- 🆕 **이슈 X (어제 발견) fix push + 검증 통과**: D2 의 Dockerfile `ADD <URL>` 가 GitHub releases redirect 처리 못 해서 HTML 응답 저장 → JVM `Error opening zip file or JAR manifest missing`. **fix**: 5 Dockerfile `RUN wget -q -O ... && test -s ...`. 검증: agent log 에 `version: 2.27.0` 출력.
+- ✅ **T 검증 통과**: cluster-teardown.ps1 의 safety net 5 카테고리 — EBS volumes 17 orphan 자동 sweep 동작. terraform destroy 만으론 못 잡는 PVC 가 만든 EBS 정확히 청소. teardown 후 비용 = 0.
+- ✅ **묶음 (b) 8 항목 push** (R/O/T/W + B-2g + D2/D3/D4): 어제 작성 push 분.
 - ✅ **부트스트랩 검증 결과**: O ✅ (argocd-server RESTARTS=0, restart loop 해소), D3 ✅ (collector "Everything is ready"), D4 ✅ (Grafana sidecar 가 2 ConfigMap 자동 import).
 - ❌ **D2 fail** → 🆕 **이슈 X 등록 + fix 완료**: Docker BuildKit 의 `ADD <URL>` 가 GitHub releases redirect (S3-backed) 처리 못 해서 HTML 응답 저장 → JVM `Error opening zip file or JAR manifest missing`. 5 Dockerfile 의 `ADD URL` → `RUN wget -q -O ... && test -s ...` 로 변경. push 완료 (af75969 + 7aba07c). GHA build 통과.
 - 🆕 **이슈 Y 발견 + fix 작성** (push 대기): X 후 jar 다운로드는 정상이지만 agent log 에 `[OkHttp http://...:4317] ERROR HttpExporter ... Connection reset`. root cause: OTel Java agent default protocol = `http/protobuf` 인데 endpoint 는 4317 (gRPC port). fix: 5 chart values.yaml 에 `OTEL_EXPORTER_OTLP_PROTOCOL: grpc` 추가.
@@ -338,9 +336,9 @@
 | D1-c | EC2 노드 Role 에 ECR Pull 권한 attach | ✅ 완료 (2026-05-08) | AmazonEC2ContainerRegistryReadOnly 정책 attach |
 | D1-d | GitHub Actions workflow (matrix 전략, 4개 서비스) | ✅ **완료** (2026-05-08) | 단일 yaml + matrix + OIDC + ECR push + GHA layer cache |
 | D1-e | 매니페스트 리포 image tag 자동 bump | ⏳ 후속 | 첫 push 검증 후 진행 |
-| D2 | OpenTelemetry SDK 5개 서비스 통합 | ⏳ | Must |
-| D3 | Prometheus + Loki + Grafana values 채움 | ⏳ | Must |
-| D4 | Grafana 대시보드 1~2개 (latency, Kafka lag) | ⏳ | Must |
+| D2 | OpenTelemetry SDK 5개 서비스 통합 | ✅ **검증 완료** (2026-05-13) | Must — Java agent v2.27.0 자동 instrumentation. X/Y/Z 3 fix 후 5 service 모두 agent 정상 로드 + Spring 부팅 |
+| D3 | Prometheus + Loki + Grafana values 채움 | ✅ **검증 완료** (2026-05-13) | Must — collector pipeline (OTLP→Prometheus exporter + podMonitor) 동작 |
+| D4 | Grafana 대시보드 1~2개 (latency, Kafka lag) | ✅ **검증 완료** (2026-05-13) | Must — 2 ConfigMap (msa-overview/kafka) + sidecar 자동 import |
 | D5 | Tempo (분산 트레이싱) | ⏳ | Should |
 | D6 | Mimir (장기 메트릭) | ⏳ | Could |
 | D7 | S3 + CloudFront + ACM 정적 placeholder | ⏳ | Should |
@@ -388,6 +386,7 @@ Day 13  (5/20)     : 발표
 | 2026-05-07 | 0 | 인프라 미부트스트랩 |
 | 2026-05-08 (오전) | 0 | 동일 |
 | 2026-05-08 (오후) | **시작** | terraform apply 완료. 시간당 ~553 KRW. EC2 stop 직후 시간당 ~180 KRW |
+| 2026-05-13 (저녁) | **누적 ~12,000원 추정** (예산 18%) | 묶음 (b) 검증 cycle ~1.5h 운영 + X/Y/Z 디버깅 cycle ~1h. teardown 완료 비용 = 0. 남은 예산 ~54,000원 ≈ A++ 라운드 + 부트스트랩 1~2회 + 발표 리허설 가능. |
 
 ⚠️ 첫 부트스트랩 시점부터 시간당 ~553원 청구. **destroy/bootstrap 운영 정책** (CLAUDE.md §5) 준수 필수.
 
@@ -397,6 +396,7 @@ Day 13  (5/20)     : 발표
 
 | 일자 | 변경 |
 |---|---|
+| 2026-05-13 | T 검증 통과 — teardown 시 17 orphan EBS volume 자동 sweep 동작. PVC 가 만든 EBS 가 terraform destroy 만으론 안 청소되는 case 정확히 처리. |
 | 2026-05-13 | **이슈 Z root cause** — 5 chart 의 `pullPolicy: IfNotPresent` + `:latest` anti-pattern 으로 X fix push 후에도 worker node 캐시 이미지 (broken jar) 그대로. fix: 5 chart `pullPolicy: Always`. K8s default for `:latest` 복원. |
 | 2026-05-13 | 이슈 Y 신규 — OTel Java agent default protocol (http/protobuf) ↔ endpoint 4317 (gRPC) mismatch. 5 chart values.yaml 에 `OTEL_EXPORTER_OTLP_PROTOCOL: grpc` 추가. |
 | 2026-05-13 | 이슈 X 신규 + fix 완료 — D2 의 Dockerfile `ADD URL` 가 GitHub releases redirect 처리 못함. 5 Dockerfile `RUN wget -q -O ... && test -s ...` 로 변경 (af75969+7aba07c push). |
